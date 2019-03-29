@@ -65,7 +65,7 @@ if __name__=="__main__":
     readline.parse_and_bind("tab: complete")
 
     readline.set_completer(t.pathCompleter)
-    
+
 # Transfer progress provider from https://github.com/jonDel/ssh_paramiko
 def pbar(transfered_bytes, total_bytes):
     bar_length = 35
@@ -154,6 +154,35 @@ def protPrompt():
         print("\nNote: {}FTP{} protocol is inherently {}insecure{}, your password will be encrypted, but file(s) are sent unencrypted!\n".format(y_,_nc,r_,_nc))
     elif protvar == "smb":
         print("\n{}!!!WARNING!!!{} This utility will overwrite any file on the share with same name as the uploaded file. {}USE CAUTION!{}".format(r_,_nc,y_,_nc))
+
+# Credentials prompt function
+def credPrompt():
+    global uservar
+    uservar = input("\nUsername: ")
+
+    global passvar
+    passvar = getpass.getpass("\nPassword: ")
+
+# Prompt for local dir and file(s) function
+def localfsPrompt():
+    global dirvar
+    dirvar = input("\nLocal directory containing files to upload (include leading slash): ")
+    print("\nContents of directory: \n")
+    # Filter subdirectories out of directory contents
+    dirvarlist = os.listdir(dirvar)
+    for file in dirvarlist:
+        dirvaritem = os.path.join(dirvar, file)
+        if os.path.isdir(dirvaritem):
+            dirvarlist.remove(file)
+    dirlist = '\n'.join(map(str,dirvarlist))
+    print(dirlist)
+
+    # Feed directory contents list into tab completer, if Linux
+    if platform == 'Linux':
+        t.createListCompleter(dirvarlist)
+        readline.set_completer(t.listCompleter)
+    global filevar
+    filevar = input("\nFile(s) to upload (wildcards accepted): ")
 
 # Try load in last server connection from sav.mpfu, if doesn't exist create it
 try:
@@ -249,6 +278,8 @@ def finalUpload(protvar,servvar,uservar,passvar,filevar,dirvar,remdirvar):
             print("\n")
             file.close()
 
+    mpfuMenu()
+
 # Single destination upload function
 def mpfuUpload():
     # Pull in last connected server variable, prompt for current server, update sav.mpfu with current server
@@ -263,9 +294,7 @@ def mpfuUpload():
 
     protPrompt()
 
-    uservar = input("\nUsername: ")
-
-    passvar = getpass.getpass("\nPassword: ")
+    credPrompt()
 
     if protvar == "sftp":
         remdirvar = input("\nRemote upload directory (remote dir MUST be specified AND include leading and trailing slash): ")
@@ -275,24 +304,7 @@ def mpfuUpload():
     else:
         remdirvar = input("\nRemote upload directory (include leading and trailing slash, or leave blank for default): ")
 
-    # If local directory NOT supplied as CLI argument
-    # if len(sys.argv) == 1:
-    dirvar = input("\nLocal directory containing files to upload (include leading slash): ")
-    print("\nContents of directory: \n")
-    # Filter subdirectories out of directory contents
-    dirvarlist = os.listdir(dirvar)
-    for file in dirvarlist:
-        dirvaritem = os.path.join(dirvar, file)
-        if os.path.isdir(dirvaritem):
-            dirvarlist.remove(file)
-    dirlist = '\n'.join(map(str,dirvarlist))
-    print(dirlist)
-
-    # Feed directory contents list into tab completer, if Linux
-    if platform == 'Linux':
-        t.createListCompleter(dirvarlist)
-        readline.set_completer(t.listCompleter)
-    filevar = input("\nFile(s) to upload (wildcards accepted): ")
+    localfsPrompt()
 
     finalUpload(protvar,servvar,uservar,passvar,filevar,dirvar,remdirvar)
 
@@ -309,36 +321,18 @@ and with all elements separated by colons:
 Enter server list in the format above:""".format(g_,_nc,b_,_nc,r_,_nc,y_,_nc,y_,_nc))
     inputlistvar = input("> ")
 
-    protPrompt()
-
-    # Prompt for local directory and list contents for file selection
-    dirvar = input("\nLocal directory containing files to upload (include leading slash): ")
-    print("\nContents of directory: \n")
-    # Filter subdirectories out of directory contents
-    dirvarlist = os.listdir(dirvar)
-    for file in dirvarlist:
-        dirvaritem = os.path.join(dirvar, file)
-        if os.path.isdir(dirvaritem):
-            dirvarlist.remove(file)
-    dirvarlist = '\n'.join(map(str,dirvarlist))
-    print(dirvarlist)
-
-    # Feed directory contents list into tab completer
-    if platform == 'Linux':
-        t.createListCompleter(dirvarlist)
-        readline.set_completer(t.listCompleter)
-    filevar = input("\nFile(s) to upload (wildcards accepted): ")
-    print("\n")
+    localfsPrompt()
 
     # Loop through input list and parse into variables
     split_input = inputlistvar.split(",")
     for e in range(len(split_input)):
         pop_input = split_input.pop()
         elem = pop_input.split(":")
-        servvar = elem[0]
-        remdirvar = elem[1]
-        uservar = elem[2]
-        passvar = elem[3]
+        protvar = elem[0]
+        servvar = elem[1]
+        remdirvar = elem[2]
+        uservar = elem[3]
+        passvar = elem[4]
 
         # Perform uploads
         print("Starting transfers to {}{}{}: ".format(b_,servvar,_nc))
@@ -360,26 +354,8 @@ Server list file must be text in the following format, one entry per line:
             ufile_input = serv_file.read()
             sfile_input = ufile_input.strip()
 
-            # protPrompt()
+            localfsPrompt()
 
-            # Prompt for local directory and list contents for file selection
-            dirvar = input("\nLocal directory containing files to upload (include leading slash): ")
-            print("\nContents of directory: \n")
-            # Filter subdirectories out of directory contents
-            dirvarlist = os.listdir(dirvar)
-            for file in dirvarlist:
-                dirvaritem = os.path.join(dirvar, file)
-                if os.path.isdir(dirvaritem):
-                    dirvarlist.remove(file)
-            dirvarlist = '\n'.join(map(str,dirvarlist))
-            print(dirvarlist)
-
-            # Feed directory contents list into tab completer
-            if platform == 'Linux':
-                t.createListCompleter(dirvarlist)
-                readline.set_completer(t.listCompleter)
-            filevar = input("\nFile(s) to upload (wildcards accepted): ")
-            print("\n")
             # Loop through input list and parse into variables
             split_input = sfile_input.split("\n")
             for e in range(len(split_input)):
@@ -411,9 +387,10 @@ def mpfuMenu():
 
  1) Upload local files to ONE destination server
  2) Upload local files to MULTIPLE destination servers from manual INPUT
- 3) Upload local files to MULTIPLE destination servers from a LIST entered at CLI (./mpfu.py <filename>)\n\n""")
+ 3) Upload local files to MULTIPLE destination servers from a LIST entered at CLI (./mpfu.py <filename>)\n
+ q) Quit\n\n""")
 
-    choicevar = input("Select an option [1-3]: ")
+    choicevar = input("Select an option [1-3, q]: ")
 
     if choicevar == "1":
         mpfuUpload()
@@ -421,6 +398,9 @@ def mpfuMenu():
         mpfuMultiUpload()
     elif choicevar == "3":
         mpfuMultiUploadFile()
+    elif choicevar == "q" or "Q":
+        print("\n")
+        quit()
     else:
         print("\n{}Not an option!{}".format(r_,_nc))
         mpfuMenu()
