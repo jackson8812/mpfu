@@ -74,12 +74,12 @@ def pbar(transfered_bytes, total_bytes):
     spaces = ' ' * (bar_length - len(hashes))
     message = "\r    Size: "+str(total_bytes)+" bytes("\
               +str(round(float(total_bytes)/pow(2, 20), 2))+" MB)"
-    message += " || Amount of file transfered: [{0}] {1}%\r".format(hashes + spaces,
+    message += " || Amount of file transferred: [{0}] {1}%\r".format(hashes + spaces,
                                                                     round(percent * 100, 2))
     if transfered_bytes == total_bytes:
         message = "\r    Size: "+str(total_bytes)+" bytes("\
                   +str(round(float(total_bytes)/pow(2, 20), 2))+" MB)"
-        message += " || File transfered. [{0}] {1}%                    \r"\
+        message += " || File transferred. [{0}] {1}%                    \r"\
                    .format(hashes + spaces, round(percent * 100, 2))
     sys.stdout.write(message)
     sys.stdout.flush()
@@ -97,12 +97,12 @@ def fbar(ftp_bytes):
     spaces = ' ' * (bar_length - len(hashes))
     message = "\r    Size: "+str(total_bytes)+" bytes("\
               +str(round(float(total_bytes)/pow(2, 20), 2))+" MB)"
-    message += " || Amount of file transfered: [{0}] {1}%\r".format(hashes + spaces,
+    message += " || Amount of file transferred: [{0}] {1}%\r".format(hashes + spaces,
                                                                     round(percent * 100, 2))
     if fbar_bytes >= total_bytes:
         message = "\r    Size: "+str(total_bytes)+" bytes("\
                   +str(round(float(total_bytes)/pow(2, 20),2))+" MB)"
-        message += " || File transfered. [{0}] {1}%                    \r"\
+        message += " || File transferred. [{0}] {1}%                    \r"\
                    .format(hashes + spaces, round(percent * 100))
         fbar_bytes = 0
     sys.stdout.write(message)
@@ -116,12 +116,12 @@ def sbar(fname, total_bytes, transfered_bytes):
     spaces = ' ' * (bar_length - len(hashes))
     message = "\r    Size: "+str(total_bytes)+" bytes("\
               +str(round(float(total_bytes)/pow(2, 20), 2))+" MB)"
-    message += " || Amount of file transfered: [{}] {}%\r".format(hashes + spaces,
+    message += " || Amount of file transferred: [{}] {}%\r".format(hashes + spaces,
                                                                     round(percent * 100, 2))
     if transfered_bytes == total_bytes:
         message = "\r    Size: "+str(total_bytes)+" bytes("\
                   +str(round(float(total_bytes)/pow(2, 20), 2))+" MB)"
-        message += " || File transfered. [{}] {}%                    \r"\
+        message += " || File transferred. [{}] {}%                    \r"\
                    .format(hashes + spaces, round(percent * 100, 2))
     sys.stdout.write(message)
     sys.stdout.flush()
@@ -272,11 +272,13 @@ def finalUpload(protvar,servvar,uservar,passvar,filevar,dirvar,remdirvar):
             gfile = str(os.path.basename(g))
             file = open(g, 'rb')
             print("\nSending {}{}{} to {}{}{}:{}{}{} over {}{}{} =>".format(g_,g,_nc,b_,servvar,_nc,r_,remdirvar,_nc,y_,protvar.upper(),_nc))
-            sizedisplay = "    Size: "+str(os.path.getsize(g))+" bytes("+str(round(float(os.path.getsize(g))/pow(2, 20), 2))+" MB) ||"
-            print(sizedisplay)
+            sizedisplay = "\r    Size: "+str(os.path.getsize(g))+" bytes("+str(round(float(os.path.getsize(g))/pow(2, 20), 2))+" MB) ||"
+            print(sizedisplay, end="")
             u = smbhandle.open('smb://{}:{}@{}{}{}'.format(uservar,passvar,servvar,remdirvar,gfile), data = file)
-            print("\n")
+            sizedisplay += "  File transferred.   \r"
             file.close()
+            print(sizedisplay)
+            print("\n")
 
     mpfuMenu()
 
