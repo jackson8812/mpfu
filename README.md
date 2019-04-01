@@ -1,9 +1,7 @@
 # MPFU
 Multi-Protocol File Uploader
 
-I am creating MPFU to learn Python. This is my first attempt at making something whole and useable (though maybe not useful). 
-
-MPFU is cross-platform (Windows and Linux currently, macOS in the future?) and is capable of sending one or more files to multiple destination servers (from a text file or input manually) using different protocols for each connection, if desired. 
+MPFU is a cross-platform (Windows and Linux currently, macOS in the future?) and is capable of sending one or more files to multiple destination servers (from a text file or input manually) using different protocols for each connection, if desired. 
 
 #### Features:
 - **FTP, SFTP, SCP, SMB/CIFS, AWS S3 upload**
