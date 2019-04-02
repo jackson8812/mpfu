@@ -3,6 +3,7 @@
 import os, sys, platform, socket, getpass, glob, ftplib, paramiko, scp, warnings, urllib, boto3
 from smb.SMBHandler import SMBHandler
 from botocore.exceptions import NoCredentialsError, ClientError
+from halo import Halo
 
 # Detect platform
 plat_type = platform.system()
@@ -15,6 +16,7 @@ if plat_type == 'Windows':
     colorama.init()
     import pyreadline
     import readline
+
 # Color tags
 if plat_type == 'Linux':
     b_ = '\033[94m'
@@ -23,6 +25,8 @@ if plat_type == 'Windows':
 g_ = '\033[92m'
 r_ = '\033[91m'
 y_ = '\033[1;33m'
+p_ = '\033[1;35m'
+bld_ = '\033[1m'
 _nc = '\033[0m'
 
 # Filter paramiko warnings until new version with bugfix released
@@ -74,12 +78,12 @@ def pbar(transfered_bytes, total_bytes):
     percent = float(transfered_bytes) / total_bytes
     hashes = '#' * int(round(percent * bar_length))
     spaces = ' ' * (bar_length - len(hashes))
-    message = "\r    Size: "+str(total_bytes)+" bytes("\
+    message = "\rSize: "+str(total_bytes)+" bytes("\
               +str(round(float(total_bytes)/pow(2, 20), 2))+" MB)"
     message += " || Amount of file transferred: [{0}] {1}%\r".format(hashes + spaces,
                                                                     round(percent * 100, 2))
     if transfered_bytes == total_bytes:
-        message = "\r    Size: "+str(total_bytes)+" bytes("\
+        message = "\rSize: "+str(total_bytes)+" bytes("\
                   +str(round(float(total_bytes)/pow(2, 20), 2))+" MB)"
         message += " || File transferred. [{0}] {1}%                    \r"\
                    .format(hashes + spaces, round(percent * 100, 2))
@@ -97,12 +101,12 @@ def fbar(ftp_bytes):
     percent = float(fbar_bytes) / total_bytes
     hashes = '#' * int(round(percent * bar_length))
     spaces = ' ' * (bar_length - len(hashes))
-    message = "\r    Size: "+str(total_bytes)+" bytes("\
+    message = "\rSize: "+str(total_bytes)+" bytes("\
               +str(round(float(total_bytes)/pow(2, 20), 2))+" MB)"
     message += " || Amount of file transferred: [{0}] {1}%\r".format(hashes + spaces,
                                                                     round(percent * 100, 2))
     if fbar_bytes >= total_bytes:
-        message = "\r    Size: "+str(total_bytes)+" bytes("\
+        message = "\rSize: "+str(total_bytes)+" bytes("\
                   +str(round(float(total_bytes)/pow(2, 20),2))+" MB)"
         message += " || File transferred. [{0}] {1}%                    \r"\
                    .format(hashes + spaces, round(percent * 100))
@@ -116,12 +120,12 @@ def sbar(fname, total_bytes, transfered_bytes):
     percent = float(transfered_bytes) / total_bytes
     hashes = '#' * int(round(percent * bar_length))
     spaces = ' ' * (bar_length - len(hashes))
-    message = "\r    Size: "+str(total_bytes)+" bytes("\
+    message = "\rSize: "+str(total_bytes)+" bytes("\
               +str(round(float(total_bytes)/pow(2, 20), 2))+" MB)"
     message += " || Amount of file transferred: [{}] {}%\r".format(hashes + spaces,
                                                                     round(percent * 100, 2))
     if transfered_bytes == total_bytes:
-        message = "\r    Size: "+str(total_bytes)+" bytes("\
+        message = "\rSize: "+str(total_bytes)+" bytes("\
                   +str(round(float(total_bytes)/pow(2, 20), 2))+" MB)"
         message += " || File transferred. [{}] {}%                    \r"\
                    .format(hashes + spaces, round(percent * 100, 2))
@@ -136,12 +140,12 @@ def s3bar(t_bytes):
     percent = float(s3_bytes) / s3_f_size
     hashes = '#' * int(round(percent * bar_length))
     spaces = ' ' * (bar_length - len(hashes))
-    message = "\r    Size: "+str(s3_f_size)+" bytes("\
+    message = "\rSize: "+str(s3_f_size)+" bytes("\
               +str(round(float(s3_f_size)/pow(2, 20), 2))+" MB)"
     message += " || Amount of file transferred: [{}] {}%\r".format(hashes + spaces,
                                                                     round(percent * 100, 2))
     if s3_bytes == s3_f_size:
-        message = "\r    Size: "+str(s3_f_size)+" bytes("\
+        message = "\rSize: "+str(s3_f_size)+" bytes("\
                   +str(round(float(s3_f_size)/pow(2, 20), 2))+" MB)"
         message += " || File transferred. [{}] {}%                    \r"\
                    .format(hashes + spaces, round(percent * 100, 2))
@@ -195,10 +199,12 @@ def localfsPrompt():
     dirvar = input("\nLocal directory containing files to upload (include leading slash): ")
     print("\nContents of directory: \n")
 
+    # On Windows, tab completer allows path all the way to filename. This block handles that case.
     if os.path.isfile(dirvar):
         filevar = os.path.basename(dirvar)
         dirvar = os.path.dirname(dirvar)
         return
+
     # Filter subdirectories out of directory contents
     dirvarlist = os.listdir(dirvar)
     for file in dirvarlist:
@@ -208,10 +214,9 @@ def localfsPrompt():
     dirlist = '\n'.join(map(str,dirvarlist))
     print(dirlist)
 
-    # Feed directory contents list into tab completer, if Linux
+    # Feed directory contents list into tab completer
     t.createListCompleter(dirvarlist)
     readline.set_completer(t.listCompleter)
-    # global filevar
     filevar = input("\nFile(s) to upload (wildcards accepted): ")
     print("")
 
@@ -230,58 +235,98 @@ except IndexError:
 def finalUpload(protvar,servvar,uservar,passvar,dirvar,filevar,remdirvar):
 
     # Pull path list into a glob for parsing
-    fileglob = glob.glob(os.path.join(dirvar, filevar))
+    fileglob = glob.glob(os.path.join(dirvar, filevar.strip()))
 
     if protvar == "ftp":
-        session = ftplib.FTP_TLS()
-        session.connect(servvar, 21)
-        session.sendcmd('USER {}'.format(uservar))
-        session.sendcmd('PASS {}'.format(passvar))
-        if plat_type == 'Linux':
-            os.system('setterm -cursor off')
-        for g in fileglob:
-            if os.path.isdir(g):
-                continue
-            gfile = str(os.path.basename(g))
-            file = open('{}'.format(g), 'rb')
-            global bar_f_size
-            global transfered_bytes
-            transfered_bytes = 0
-            bar_f_size = os.path.getsize(g)
-            if remdirvar == "":
-                remdirvar = "[default]"
-            print("Sending {}{}{} to {}{}{}:{}{}{} over {}{}{} =>".format(g_,g,_nc,b_,servvar,_nc,r_,remdirvar,_nc,y_,protvar.upper(),_nc))
-            session.storbinary('STOR ' + gfile, file,callback=fbar)
-            print("\n\n")
-            file.close()
-        session.quit()
-        if plat_type == 'Linux':
-            os.system('setterm -cursor on')
-
+        try:
+            session = ftplib.FTP_TLS()
+            session.connect(servvar, 21)
+            session.sendcmd('USER {}'.format(uservar))
+            session.sendcmd('PASS {}'.format(passvar))
+            if remdirvar != "":
+                session.sendcmd('cwd {}'.format(remdirvar))
+            resp_pwd = session.sendcmd('pwd')
+            ftp_pwd = resp_pwd.lstrip('0123456789" ').rstrip('"')
+            if plat_type == 'Linux':
+                os.system('setterm -cursor off')
+            for g in fileglob:
+                if os.path.isdir(g):
+                    continue
+                gfile = str(os.path.basename(g))
+                file = open('{}'.format(g), 'rb')
+                global bar_f_size
+                global transfered_bytes
+                transfered_bytes = 0
+                bar_f_size = os.path.getsize(g)
+                if remdirvar == "":
+                    remdirvar = "[default]"
+                print("Sending {}{}{} to {}{}{}:{}{}{} over {}{}{} =>".format(g_,g,_nc,b_,servvar,_nc,p_,ftp_pwd,_nc,y_,protvar.upper(),_nc))
+                session.storbinary('STOR ' + gfile, file,callback=fbar)
+                print("\n\n")
+                file.close()
+            session.quit()
+            if plat_type == 'Linux':
+                os.system('setterm -cursor on')
+        except ftplib.all_errors as e:
+            print("""
+{}<ERROR>
+The server raised an exception: {} {}\n""".format(r_,e,_nc))
+            input("Press a key to continue...")
+            print(" ")
+            return
     if protvar == "sftp":
-        pssh = paramiko.SSHClient()
-        pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        pssh.connect(hostname=servvar,username=uservar,password=passvar)
-        sftpc = pssh.open_sftp()
-        if plat_type == 'Linux':
-            os.system('setterm -cursor off')
-        for g in fileglob:
-            if os.path.isdir(g):
-                continue
-            gfile = str(os.path.basename(g))
-            print("Sending {}{}{} to {}{}{}:{}{}{} over {}{}{} =>".format(g_,g,_nc,b_,servvar,_nc,r_,remdirvar,_nc,y_,protvar.upper(),_nc))
-            sftpc.put(g,remdirvar + gfile,callback=pbar)
-            print("\n\n")
-        sftpc.close()
-        if plat_type == 'Linux':
-            os.system('setterm -cursor on')
+        try:
+            pssh = paramiko.SSHClient()
+            pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            pssh.connect(hostname=servvar,username=uservar,password=passvar,timeout=12)
+            sftpc = pssh.open_sftp()
+            if plat_type == 'Linux':
+                os.system('setterm -cursor off')
+            for g in fileglob:
+                if os.path.isdir(g):
+                    continue
+                gfile = str(os.path.basename(g))
+                print("Sending {}{}{} to {}{}{}:{}{}{} over {}{}{} =>".format(g_,g,_nc,b_,servvar,_nc,p_,remdirvar,_nc,y_,protvar.upper(),_nc))
+                sftpc.put(g,remdirvar + gfile,callback=pbar)
+                print("\n\n")
+            sftpc.close()
+            if plat_type == 'Linux':
+                os.system('setterm -cursor on')
+        except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.BadAuthenticationType):
+            print("""
+{}<ERROR>
+Username, password, or SSH key are incorrect, or the server is not accepting the type of authentication attempted{}.\n""".format(r_,_nc))
+            input("Press a key to continue...")
+            print(" ")
+            return
+        except (BlockingIOError, socket.timeout):
+            print("""
+{}<ERROR>
+Server is offline, unavailable, or otherwise not responding. Check the hostname or IP and try again.{}\n""".format(r_,_nc))
+            input("Press a key to continue...")
+            print(" ")
+            return
+        except scp.SCPException as e:
+            print("""
+{}<ERROR>
+The server raised an exception: {} {}\n""".format(r_,e,_nc))
+            input("Press a key to continue...")
+            print(" ")
+            return
+        except WindowsError as e:
+            print("""
+{}<ERROR>
+The server raised an exception: {} {}\n""".format(r_,e,_nc))
+            input("Press a key to continue...")
+            print(" ")
+            return
 
     if protvar == "scp":
         try:
             pssh = paramiko.SSHClient()
             pssh.load_system_host_keys()
             pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            pssh.connect(hostname=servvar,username=uservar,password=passvar)
+            pssh.connect(hostname=servvar,username=uservar,password=passvar, timeout=12.0)
             pscp = scp.SCPClient(pssh.get_transport(), progress=sbar)
             if plat_type == 'Linux':
                 os.system('setterm -cursor off')
@@ -289,7 +334,7 @@ def finalUpload(protvar,servvar,uservar,passvar,dirvar,filevar,remdirvar):
                 if os.path.isdir(g):
                     continue
                 gfile = str(os.path.basename(g))
-                print("Sending {}{}{} to {}{}{}:{}{}{} over {}{}{} =>".format(g_,g,_nc,b_,servvar,_nc,r_,remdirvar,_nc,y_,protvar.upper(),_nc))
+                print("Sending {}{}{} to {}{}{}:{}{}{} over {}{}{} =>".format(g_,g,_nc,b_,servvar,_nc,p_,remdirvar,_nc,y_,protvar.upper(),_nc))
                 pscp.put(g, remote_path=remdirvar)
                 print("\n\n")
             pscp.close()
@@ -297,24 +342,65 @@ def finalUpload(protvar,servvar,uservar,passvar,dirvar,filevar,remdirvar):
                 os.system('setterm -cursor on')
         except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.BadAuthenticationType):
             print("""
-{}Username, password, or SSH key are incorrect, or the server is not accepting the type of authentication attempted{}.\n""".format(r_,_nc))
+{}<ERROR>
+Username, password, or SSH key are incorrect, or the server is not accepting the type of authentication attempted{}.\n""".format(r_,_nc))
             input("Press a key to continue...")
+            print(" ")
             return
+        except (BlockingIOError, socket.timeout):
+            print("""
+{}<ERROR>
+Server is offline, unavailable, or otherwise not responding. Check the hostname or IP and try again.{}\n""".format(r_,_nc))
+            input("Press a key to continue...")
+            print(" ")
+            return
+        except scp.SCPException as e:
+            print("""
+{}<ERROR>
+The server raised an exception: {} {}\n""".format(r_,e,_nc))
+            input("Press a key to continue...")
+            print(" ")
+            return
+        except WindowsError:
+            print("""
+{}<ERROR>
+The server raised an exception.\n""")
+            input("Press a key to continue...")
+            print(" ")
+            return
+
     if protvar == "smb":
-        smbhandle = urllib.request.build_opener(SMBHandler)
-        for g in fileglob:
-            if os.path.isdir(g):
-                continue
-            gfile = str(os.path.basename(g))
-            file = open(g, 'rb')
-            print("Sending {}{}{} to {}{}{}:{}{}{} over {}{}{} =>".format(g_,g,_nc,b_,servvar,_nc,r_,remdirvar,_nc,y_,protvar.upper(),_nc))
-            sizedisplay = "\r    Size: "+str(os.path.getsize(g))+" bytes("+str(round(float(os.path.getsize(g))/pow(2, 20), 2))+" MB) ||"
-            print(sizedisplay, end="")
-            u = smbhandle.open('smb://{}:{}@{}{}{}'.format(uservar,passvar,servvar,remdirvar,gfile), data = file)
-            sizedisplay += "  File transferred. \r"
-            file.close()
-            print(sizedisplay)
+        try:
+            smbhandle = urllib.request.build_opener(SMBHandler)
+            if plat_type == 'Linux':
+                os.system('setterm -cursor off')
+            for g in fileglob:
+                if os.path.isdir(g):
+                    continue
+                gfile = str(os.path.basename(g))
+                file = open(g, 'rb')
+                print("Sending {}{}{} to {}{}{}:{}{}{} over {}{}{} =>".format(g_,g,_nc,b_,servvar,_nc,p_,remdirvar,_nc,y_,protvar.upper(),_nc))
+                sizedisplay = "Size: "+str(os.path.getsize(g))+" bytes("+str(round(float(os.path.getsize(g))/pow(2, 20), 2))+" MB) ||"
+                spinner = Halo(text=sizedisplay, placement='right', color='yellow', spinner='dots')
+                spinner.start()
+                u = smbhandle.open('smb://{}:{}@{}{}{}'.format(uservar,passvar,servvar,remdirvar,gfile), data = file)
+                if plat_type == 'Windows':
+                    spinner.stop_and_persist('√', sizedisplay + ' Transfer complete.')
+                elif plat_type == 'Linux':
+                    spinner.succeed(sizedisplay + ' Transfer complete.')
+                file.close()
+                print("\n")
+            if plat_type == 'Linux':
+                os.system('setterm -cursor on')
             print("\n")
+        except (socket.gaierror, socket.timeout):
+            spinner.stop()
+            print("""
+{}<ERROR>
+Server is offline, unavailable, or otherwise not responding. Check the hostname or IP and try again.{}\n""".format(r_,_nc))
+            input("Press a key to continue...")
+            print(" ")
+            return
 
     if protvar == "s3":
         try:
@@ -329,39 +415,44 @@ def finalUpload(protvar,servvar,uservar,passvar,dirvar,filevar,remdirvar):
                 s3_f_size = os.path.getsize(g)
                 global s3_bytes
                 s3_bytes = 0
-                print("Sending {}{}{} to {}{}{}:{}{}{} over {}{}{} =>".format(g_,g,_nc,b_,'s3://',_nc,r_,remdirvar,_nc,y_,'HTTPS',_nc))
+                print("Sending {}{}{} to {}{}{}:{}{}{} over {}{}{} =>".format(g_,g,_nc,b_,'s3://',_nc,p_,remdirvar,_nc,y_,'HTTPS',_nc))
                 s3.upload_file(g, remdirvar, gfile, Callback=s3bar)
-                if plat_type == 'Linux':
-                    os.system('setterm -cursor on')
                 print("\n\n")
+            if plat_type == 'Linux':
+                os.system('setterm -cursor on')
         except NoCredentialsError:
             print("""
-    {}Could not determine valid credentials for AWS{}.
+{}Could not determine valid credentials for AWS{}.
 
-    AWS credentials are retrieved automatically by boto3 (the library used to interact with S3) in a number of ways.
-    It is simplest and recommended to install {}awscli{} for your platform, but there are other options.
+AWS credentials are retrieved automatically by boto3 (the library used to interact with S3) in a number of ways.
+It is simplest and recommended to install {}awscli{} for your platform, but there are other options.
 
-    Refer to the boto3 documentation on the topic here:
-    https://boto3.amazonaws.com/v1/documentation/api/latest/guide/configuration.html
+Refer to the boto3 documentation on the topic here:
+https://boto3.amazonaws.com/v1/documentation/api/latest/guide/configuration.html
 
-    To install {}awscli{} through Python:
+To install {}awscli{} through Python:
 
-    pip install awscli\n""".format(r_,_nc,y_,_nc,y_,_nc))
+pip install awscli\n""".format(r_,_nc,y_,_nc,y_,_nc))
 
             input("Press a key to continue...")
+            print(" ")
             return
         except ClientError as e:
             if e.response['Error']['Code'] == "NoSuchBucket" or "AccessDenied":
                 print("""
-    Bucket name {}doesn't exist{} or {}access was denied{}. Check the bucket name and your permissions and try again.
-        """.format(r_,_nc,r_,_nc))
+{}<ERROR>
+Bucket name doesn't exist or access was denied. Check the bucket name and your permissions and try again.{}
+        """.format(r_,_nc))
                 input("Press a key to continue...")
+                print(" ")
                 return
             elif e.response['Error']['Code'] != "":
                 print("""
-    Unknown {}error{}. Check your credentials and bucketname and try again.
+{}<ERROR>
+Unknown error. Check your credentials and bucketname and try again.{}
     """.format(r_,_nc))
                 input("Press a key to continue...")
+                print(" ")
                 return
 
 # Single destination upload function
@@ -388,7 +479,7 @@ def mpfuUpload():
         if protvar == "sftp":
             remdirvar = input("\nRemote upload directory (remote dir MUST be specified AND include leading and trailing slash): ")
         elif protvar == "smb":
-            print("\nRemote upload share (input name of share with forward slashes, i.e. {}/network/share/{}): ".format(r_,_nc), end="")
+            print("\nRemote upload share (input name of share with forward slashes, i.e. {}/network/share/{}): ".format(p_,_nc), end="")
             remdirvar = input()
         else:
             remdirvar = input("\nRemote upload directory (include leading and trailing slash, or leave blank for default): ")
@@ -420,6 +511,7 @@ To install {}awscli{} through Python:
 pip install awscli\n""".format(r_,_nc,y_,_nc,y_,_nc))
 
         input("Press a key to return to the menu...")
+        print(" ")
         return
     except ClientError as e:
         if e.response['Error']['Code'] == "NoSuchBucket" or "AccessDenied":
@@ -427,12 +519,14 @@ pip install awscli\n""".format(r_,_nc,y_,_nc,y_,_nc))
 Bucket name {}doesn't exist{} or {}access was denied{}. Check the bucket name and your permissions and try again.
     """.format(r_,_nc,r_,_nc))
             input("Press a key to return to the menu...")
+            print(" ")
             return
         elif e.response['Error']['Code'] != "":
             print("""
 Unknown {}error{}. Check your credentials and bucketname and try again.
 """.format(r_,_nc))
             input("Press a key to return to the menu...")
+            print(" ")
             return
 
     localfsPrompt()
@@ -453,7 +547,7 @@ FTP, SFTP, SCP, and SMB:
 AWS S3:
 {}s3{}:{}bucketname{}
 
-Enter server list in the format above:""".format(g_,_nc,b_,_nc,r_,_nc,y_,_nc,y_,_nc,g_,_nc,r_,_nc))
+Enter server list in the format above:""".format(g_,_nc,b_,_nc,p_,_nc,y_,_nc,y_,_nc,g_,_nc,p_,_nc))
     inputlistvar = input("> ")
 
     localfsPrompt()
@@ -463,20 +557,20 @@ Enter server list in the format above:""".format(g_,_nc,b_,_nc,r_,_nc,y_,_nc,y_,
     for e in range(len(split_input)):
         pop_input = split_input.pop()
         elem = pop_input.split(":")
-        protvar = elem[0]
+        protvar = elem[0].strip()
         if protvar != "s3":
-            servvar = elem[1]
-            remdirvar = elem[2]
-            uservar = elem[3]
-            passvar = elem[4]
+            servvar = elem[1].strip()
+            remdirvar = elem[2].strip()
+            uservar = elem[3].strip()
+            passvar = elem[4].strip()
         if protvar == "s3":
-            remdirvar = elem[1]
+            remdirvar = elem[1].strip()
 
         # Perform uploads
         if protvar != "s3":
-            print("Starting transfers to {}{}{}: ".format(b_,servvar,_nc))
+            print("Starting transfers to {}{}{}: \n".format(b_,servvar,_nc))
         if protvar == "s3":
-            print("Starting transfers to {}{}{}:{}{}{} ".format(y_,'s3://',_nc,r_,remdirvar,_nc))
+            print("Starting transfers to {}{}{}:{}{}{}: \n".format(y_,'s3://',_nc,p_,remdirvar,_nc))
             servvar, uservar, passvar = (" ", " ", " ")
         finalUpload(protvar,servvar,uservar,passvar,dirvar,filevar,remdirvar)
 
@@ -493,8 +587,9 @@ FTP, SFTP, SCP, and SMB:
 
 AWS S3:
 {}s3{}:{}bucketname{}
-""".format(g_,_nc,b_,_nc,r_,_nc,y_,_nc,y_,_nc,g_,_nc,r_,_nc))
+""".format(g_,_nc,b_,_nc,p_,_nc,y_,_nc,y_,_nc,g_,_nc,p_,_nc))
         input("Press a key to return to the menu...")
+        print(" ")
         return
     elif len(sys.argv) == 2:
         with open(sys.argv[1], 'r') as serv_file:
@@ -508,44 +603,44 @@ AWS S3:
             for e in range(len(split_input)):
                 pop_input = split_input.pop()
                 elem = pop_input.split(":")
-                protvar = elem[0]
+                protvar = elem[0].strip()
                 if protvar != "s3":
-                    servvar = elem[1]
-                    remdirvar = elem[2]
-                    uservar = elem[3]
-                    passvar = elem[4]
+                    servvar = elem[1].strip()
+                    remdirvar = elem[2].strip()
+                    uservar = elem[3].strip()
+                    passvar = elem[4].strip()
                 if protvar == "s3":
-                    remdirvar = elem[1]
+                    remdirvar = elem[1].strip()
                     servvar = ""
                     uservar = ""
                     passvar = ""
 
                 # Perform uploads
                 if protvar != "s3":
-                    print("Starting transfers to {}{}{}: ".format(b_,servvar,_nc))
+                    print("Starting transfers to {}{}{}: \n".format(b_,servvar,_nc))
                 if protvar == "s3":
-                    print("Starting transfers to {}{}{}:{}{}{} ".format(y_,'s3://',_nc,r_,remdirvar,_nc))
+                    print("Starting transfers to {}{}{}:{}{}{}: \n".format(y_,'s3://',_nc,p_,remdirvar,_nc))
                 finalUpload(protvar,servvar,uservar,passvar,dirvar,filevar,remdirvar)
 
 # MPFU menu function
 def mpfuMenu():
     bashCompleter()
     print("""
-	 __  __ _____  ______ _    _
+	 {}__  __ _____  ______ _    _
 	|  \\/  |  __ \\|  ____| |  | |
 	| \\  / | |__) | |__  | |  | |
 	| |\\/| |  ___/|  __| | |  | |
 	| |  | | |    | |    | |__| |
-	|_|  |_|_|    |_|     \\____/""")
+	|_|  |_|_|    |_|     \\____/{}""".format(bld_,_nc))
     print("""
      -=|Multi-Protocol File Uploader|=-
 
- |Upload|
+ {}|Upload|{}
 
- 1) Upload local files to ONE destination (server, share, bucket, etc.)
- 2) Upload local files to MULTIPLE destinations from manual INPUT
- 3) Upload local files to MULTIPLE destinations from a LIST entered at CLI (./mpfu.py <filename>)\n
- q) Quit\n\n""")
+ 1) Upload local files to {}one{} destination (server, share, bucket, etc.)
+ 2) Upload local files to {}multiple{} destinations from manual INPUT
+ 3) Upload local files to {}multiple{} destinations from a {}list{} entered at CLI (./mpfu.py <filename>)\n
+ q) Quit\n\n""".format(bld_,_nc,y_,_nc,y_,_nc,y_,_nc,y_,_nc))
 
     choicevar = input("Select an option [1-3, q]: ")
 
@@ -557,7 +652,7 @@ def mpfuMenu():
         mpfuMultiUploadFile()
     elif choicevar == "q" or "Q":
         print("\n")
-        quit()
+        sys.exit()
     else:
         print("\n{}Not an option!{}".format(r_,_nc))
 
