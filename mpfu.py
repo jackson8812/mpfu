@@ -466,16 +466,20 @@ def mpfuUpload():
     if protvar == "s3":
         return s3Upload()
     else:
-        # Allow tab completion for previous connections, and deduplicate sav.mpfu entries
-        tabsrvlist = []
-        with open('sav.mpfu', 'w') as f:
-            for line in lastserv_f:
-                if line not in tabsrvlist:
-                    tabsrvlist.append(line.strip())
-                    dedupe = set(tabsrvlist)
-            for line in dedupe:
-                f.write(line + "\n")
+        # Deduplicate previous connection list and prepare for tab completion
+        sav = open('sav.mpfu')
+        sav_f = sav.readlines()
+        sav.close()
+        dedupe_f = []
+        for f in sav_f:
+            dedupe_f.append(f.strip())
+        tabsrvlist = set(dedupe_f)
+        sav_again = open('sav.mpfu', 'w')
+        for line in tabsrvlist:
+            sav_again.write(line.strip() + "\n")
+        sav_again.close()
 
+        # Allow tab completion of previous connections
         t.createListCompleter(tabsrvlist)
         readline.set_completer(t.listCompleter)
 
@@ -484,8 +488,9 @@ def mpfuUpload():
         if servvar == "":
             servvar = lastserv
         lastserv_u = open('sav.mpfu', 'a')
-        lastserv_u.write(servvar + "\n")
+        lastserv_u.write(servvar)
         lastserv_u.close()
+        lastserv = servvar
     if protvar != "s3":
 
         credPrompt()
