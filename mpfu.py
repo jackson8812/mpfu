@@ -196,6 +196,7 @@ def credPrompt():
 def localfsPrompt():
     global dirvar
     global filevar
+    readline.set_completer(t.pathCompleter)
     dirvar = input("\nLocal directory containing files to upload (include leading slash): ")
     print("\nContents of directory: \n")
 
@@ -278,7 +279,7 @@ The server raised an exception: {} {}\n""".format(r_,e,_nc))
         try:
             pssh = paramiko.SSHClient()
             pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            pssh.connect(hostname=servvar,username=uservar,password=passvar,timeout=12)
+            pssh.connect(hostname=servvar,username=uservar,password=passvar,timeout=8)
             sftpc = pssh.open_sftp()
             if plat_type == 'Linux':
                 os.system('setterm -cursor off')
@@ -306,7 +307,7 @@ Server is offline, unavailable, or otherwise not responding. Check the hostname 
             input("Press a key to continue...")
             print(" ")
             return
-        except scp.SCPException as e:
+        except socket.gaierror as e:
             print("""
 {}<ERROR>
 The server raised an exception: {} {}\n""".format(r_,e,_nc))
@@ -326,7 +327,7 @@ The server raised an exception: {} {}\n""".format(r_,e,_nc))
             pssh = paramiko.SSHClient()
             pssh.load_system_host_keys()
             pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            pssh.connect(hostname=servvar,username=uservar,password=passvar, timeout=12.0)
+            pssh.connect(hostname=servvar,username=uservar,password=passvar, timeout=8)
             pscp = scp.SCPClient(pssh.get_transport(), progress=sbar)
             if plat_type == 'Linux':
                 os.system('setterm -cursor off')
@@ -465,12 +466,25 @@ def mpfuUpload():
     if protvar == "s3":
         return s3Upload()
     else:
-        print("\nServer IP or hostname (Leave blank for last connected: [{}{}{}]): ".format(b_,lastserv,_nc), end = "")
-        servvar = input()
+        # Allow tab completion for previous connections, and deduplicate sav.mpfu entries
+        tabsrvlist = []
+        with open('sav.mpfu', 'w') as f:
+            for line in lastserv_f:
+                if line not in tabsrvlist:
+                    tabsrvlist.append(line.strip())
+                    dedupe = set(tabsrvlist)
+            for line in dedupe:
+                f.write(line + "\n")
+
+        t.createListCompleter(tabsrvlist)
+        readline.set_completer(t.listCompleter)
+
+        servprompt = "\nServer IP or hostname (Leave blank for last connected: [{}{}{}]): ".format(b_,lastserv,_nc)
+        servvar = input(servprompt).strip()
         if servvar == "":
             servvar = lastserv
-        lastserv_u = open('sav.mpfu', 'w')
-        lastserv_u.write(servvar)
+        lastserv_u = open('sav.mpfu', 'a')
+        lastserv_u.write(servvar + "\n")
         lastserv_u.close()
     if protvar != "s3":
 
