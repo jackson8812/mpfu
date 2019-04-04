@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-import os, sys, platform, socket, getpass, glob, ftplib, paramiko, scp, warnings, urllib, boto3
+import os, sys, platform, socket, getpass, glob, ftplib, paramiko, scp, warnings, urllib, boto3, fabric
 from smb.SMBHandler import SMBHandler
 from botocore.exceptions import NoCredentialsError, ClientError
+import fabric.exceptions
 from halo import Halo
 
 # Detect platform
@@ -222,6 +223,7 @@ def localfsPrompt():
     print("")
 
 # Try load in last server connection from sav.mpfu, if doesn't exist create it
+global lastserv
 try:
     lastserv_f = open('sav.mpfu').readlines()
     lastserv = lastserv_f[-1].strip()
@@ -231,6 +233,35 @@ except IOError:
     lastserv = ""
 except IndexError:
     lastserv = ""
+
+def servPrompt():
+    global lastserv
+    global servvar
+    # Deduplicate previous connection list and prepare for tab completion
+    sav = open('sav.mpfu')
+    sav_f = sav.readlines()
+    sav.close()
+    dedupe_f = []
+    for f in sav_f:
+        dedupe_f.append(f.strip())
+    tabsrvlist = set(dedupe_f)
+    sav_again = open('sav.mpfu', 'w')
+    for line in tabsrvlist:
+        sav_again.write(line.strip() + "\n")
+    sav_again.close()
+
+    # Allow tab completion of previous connections
+    t.createListCompleter(tabsrvlist)
+    readline.set_completer(t.listCompleter)
+
+    servprompt = "\nServer IP or hostname (Leave blank for last connected: [{}{}{}]): ".format(b_,lastserv,_nc)
+    servvar = input(servprompt).strip()
+    if servvar == "":
+        servvar = lastserv
+    lastserv_u = open('sav.mpfu', 'a')
+    lastserv_u.write(servvar)
+    lastserv_u.close()
+    lastserv = servvar
 
 # Actual multi-protocol uploader function
 def finalUpload(protvar,servvar,uservar,passvar,dirvar,filevar,remdirvar):
@@ -466,31 +497,8 @@ def mpfuUpload():
     if protvar == "s3":
         return s3Upload()
     else:
-        # Deduplicate previous connection list and prepare for tab completion
-        sav = open('sav.mpfu')
-        sav_f = sav.readlines()
-        sav.close()
-        dedupe_f = []
-        for f in sav_f:
-            dedupe_f.append(f.strip())
-        tabsrvlist = set(dedupe_f)
-        sav_again = open('sav.mpfu', 'w')
-        for line in tabsrvlist:
-            sav_again.write(line.strip() + "\n")
-        sav_again.close()
+        servPrompt()
 
-        # Allow tab completion of previous connections
-        t.createListCompleter(tabsrvlist)
-        readline.set_completer(t.listCompleter)
-
-        servprompt = "\nServer IP or hostname (Leave blank for last connected: [{}{}{}]): ".format(b_,lastserv,_nc)
-        servvar = input(servprompt).strip()
-        if servvar == "":
-            servvar = lastserv
-        lastserv_u = open('sav.mpfu', 'a')
-        lastserv_u.write(servvar)
-        lastserv_u.close()
-        lastserv = servvar
     if protvar != "s3":
 
         credPrompt()
@@ -641,16 +649,75 @@ AWS S3:
                     print("Starting transfers to {}{}{}:{}{}{}: \n".format(y_,'s3://',_nc,p_,remdirvar,_nc))
                 finalUpload(protvar,servvar,uservar,passvar,dirvar,filevar,remdirvar)
 
+def mpfuSSH():
+    # If serverlist file NOT supplied as CLI argument
+    if len(sys.argv) == 1:
+        print("""
+Serverlist not provided at CLI. Defaulting to {}single machine{} control mode.
+If you wish to issue commands to multiple machines, provide a serverlist when running {}MPFU{}.
+        """.format(y_,_nc,bld_,_nc))
+        global servvar
+        servPrompt()
+        global uservar
+        global passvar
+        credPrompt()
+
+        cmdloop = 1
+        while cmdloop == 1:
+            try:
+                print("\nConnecting to {}{}{} =>".format(b_,servvar,_nc), end="")
+                cmdvar = input("\nEnter command to run on server (Ctrl-D to return to menu): ")
+                print(" ")
+                cmdresult = fabric.Connection(servvar, user=uservar, connect_kwargs={"password": passvar}).run(cmdvar)
+                print(" ")
+            except EOFError:
+                break
+            except Exception as e:
+                print("{}The command returned an error{}: {}".format(r_,_nc,e))
+                pass
+
+    elif len(sys.argv) == 2:
+        cmdvar = input("\nEnter command to run on servers in list (Ctrl-D to return to menu): ")
+        with open(sys.argv[1], 'r') as serv_file:
+            ufile_input = serv_file.read()
+            sfile_input = ufile_input.strip()
+
+            # Loop through input list and parse into variables
+            split_input = sfile_input.split("\n")
+            for e in range(len(split_input)):
+                pop_input = split_input.pop()
+                elem = pop_input.split(":")
+                protvar = elem[0].strip()
+                if protvar != "s3":
+                    servvar = elem[1].strip()
+                    remdirvar = elem[2].strip()
+                    uservar = elem[3].strip()
+                    passvar = elem[4].strip()
+                if protvar == "s3":
+                    continue
+                try:
+                    print("\nConnecting to {}{}{} =>".format(b_,servvar,_nc))
+                    print(" ")
+                    cmdresult = fabric.Connection(servvar, user=uservar, connect_kwargs={"password": passvar}).run(cmdvar)
+                    print(" ")
+                    input("Press a key to continue (Ctrl-D to return to menu)...")
+                except EOFError:
+                    break
+                except Exception as e:
+                    print("{}The command returned an error{}: {}\n".format(r_,_nc,e))
+                    try:
+                        input("Press a key to continue (Ctrl-D to return to menu)...")
+                    except EOFError:
+                        break
 # MPFU menu function
 def mpfuMenu():
+    # Revert back to path completer after returning to menu
     bashCompleter()
     print("""
-	 {}__  __ _____  ______ _    _
-	|  \\/  |  __ \\|  ____| |  | |
-	| \\  / | |__) | |__  | |  | |
-	| |\\/| |  ___/|  __| | |  | |
-	| |  | | |    | |    | |__| |
-	|_|  |_|_|    |_|     \\____/{}""".format(bld_,_nc))
+            {}__  __ ___ ___ _   _
+           |  \/  | _ \ __| | | |
+           | |\/| |  _/ _|| |_| |
+           |_|  |_|_| |_|  \___/{}""".format(bld_,_nc))
     print("""
      -=|Multi-Protocol File Uploader|=-
 
@@ -659,9 +726,15 @@ def mpfuMenu():
  1) Upload local files to {}one{} destination (server, share, bucket, etc.)
  2) Upload local files to {}multiple{} destinations from manual INPUT
  3) Upload local files to {}multiple{} destinations from a {}list{} entered at CLI (./mpfu.py <filename>)\n
- q) Quit\n\n""".format(bld_,_nc,y_,_nc,y_,_nc,y_,_nc,y_,_nc))
 
-    choicevar = input("Select an option [1-3, q]: ")
+ {}|Control|{}
+
+ S) Issue a command over SSH to one or more remote machines
+
+
+ q) Quit\n""".format(bld_,_nc,y_,_nc,y_,_nc,y_,_nc,y_,_nc,bld_,_nc))
+
+    choicevar = input("Select an option [1-3, S, or (q)uit]: ")
 
     if choicevar == "1":
         mpfuUpload()
@@ -669,7 +742,9 @@ def mpfuMenu():
         mpfuMultiUpload()
     elif choicevar == "3":
         mpfuMultiUploadFile()
-    elif choicevar == "q" or "Q":
+    elif choicevar == "s" or choicevar == "S":
+        mpfuSSH()
+    elif choicevar == "q" or choicevar == "Q":
         print("\n")
         sys.exit()
     else:
