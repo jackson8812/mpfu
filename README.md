@@ -15,4 +15,4 @@ MPFU is a cross-platform (Windows and Linux currently, macOS in the future?) fil
 
 Python 3 is required for the script version.
 
-A Windows EXE version is available in the EXE folder. It is standalone and does not require Python or anything else to be installed.
+In the /exe/ folder are a Windows EXE version, and a Linux ELF version. They are both standalone and do not require Python or anything else to be installed.
