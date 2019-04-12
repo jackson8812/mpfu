@@ -2,7 +2,6 @@
 
 import os, sys, platform, socket, getpass, glob, ftplib, paramiko, scp, warnings, urllib, boto3, fabric
 from smb.SMBHandler import SMBHandler
-import nmb
 from botocore.exceptions import NoCredentialsError, ClientError
 import fabric.exceptions
 from halo import Halo
@@ -816,9 +815,10 @@ def mpfuMenu():
  S) Issue a {}command{} over {}SSH{} to one or more remote machines
 
 
- q) Quit\n""".format(bld_,_nc,y_,_nc,y_,_nc,y_,_nc,y_,_nc,y_,_nc,bld_,_nc,y_,_nc,y_,_nc))
+ q) Quit\n""".format(bld_,_nc,y_,_nc,y_,_nc,y_,_nc,y_,_nc,y_,_nc,bld_,_nc,y_,_nc,y_,_nc,y_,_nc))
 
-    choicevar = input("Select an option [1-4, S, or (q)uit]: ")
+    # choicevar = input("Select an option [1-4, S, or (q)uit]: ")
+    choicevar = input("Select an option [{}CTRL-D at any time returns to main menu{}]: ".format(y_,_nc))
 
     if choicevar == "1":
         mpfuUpload()
@@ -835,7 +835,9 @@ def mpfuMenu():
         sys.exit()
     else:
         print("\n{}Not an option!{}".format(r_,_nc))
-
 menuloop = 1
 while menuloop == 1:
-    mpfuMenu()
+    try:
+            mpfuMenu()
+    except EOFError:
+        pass
