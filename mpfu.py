@@ -2,12 +2,16 @@
 
 import os, sys, platform, socket, getpass, glob, ftplib, paramiko, scp, warnings, urllib, boto3, fabric
 from smb.SMBHandler import SMBHandler
+import nmb
 from botocore.exceptions import NoCredentialsError, ClientError
 import fabric.exceptions
 from halo import Halo
 
 # Detect platform
 plat_type = platform.system()
+
+# Homepath of script
+homepath = os.path.abspath(os.path.dirname(sys.argv[0]))
 
 # Platform specific imports
 if plat_type == 'Linux':
@@ -649,6 +653,80 @@ AWS S3:
                     print("Starting transfers to {}{}{}:{}{}{}: \n".format(y_,'s3://',_nc,p_,remdirvar,_nc))
                 finalUpload(protvar,servvar,uservar,passvar,dirvar,filevar,remdirvar)
 
+def mpfuDirUpload():
+
+    print("\n\nCurrently only {}SFTP{} (and therefore Linux systems) are supported for this function.\n".format(y_,_nc))
+    servPrompt()
+    credPrompt()
+    remdirvar = input("\nRemote directory on server to upload local directory (if nonexistant, it will be created): ")
+    global dirvar
+    readline.set_completer(t.pathCompleter)
+    dirvar = input("\nLocal directory to upload (include leading slash): ")
+    print(" ")
+    protvar = "SFTP"
+    term_width, term_height = os.get_terminal_size()
+    try:
+        pssh = paramiko.SSHClient()
+        pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        pssh.connect(hostname=servvar,username=uservar,password=passvar,timeout=8)
+        sftpc = pssh.open_sftp()
+
+        dirvar = dirvar.replace('\\','/').rstrip("/")
+        os.chdir(os.path.split(dirvar)[0])
+        parent = os.path.split(dirvar)[1]
+
+        if plat_type == 'Linux':
+            os.system('setterm -cursor off')
+        for walker in os.walk(parent):
+            try:
+                remdir_create = os.path.normpath(os.path.join(remdirvar,walker[0])).replace('\\','/')
+                pretty_remdir = ("..." + remdir_create[50:]) if len(remdir_create) > 52 else remdir_create
+                remdir_creation = "Creating {}{}{}=>".format(p_,pretty_remdir,_nc)
+                print(remdir_creation + " " * (term_width - len(remdir_creation) - 1))
+                sftpc.mkdir(os.path.normpath(os.path.join(remdirvar,walker[0])).replace('\\','/'))
+            except Exception as e:
+                print("{}Can't create dir{} {}{}{}{}; already exists or bad permissions{}".format(r_,_nc,p_,pretty_remdir,_nc,r_,_nc))
+                print("")
+
+            for file in walker[2]:
+                print("Transferring: {}{}{}".format(g_,file,_nc), end="\r")
+                transferprog = "Transferring: {}{}{}".format(g_,file,_nc)
+                print(transferprog + " " * (term_width - len(transferprog) - 1), end="\r")
+                sftpc.put(os.path.normpath(os.path.join(walker[0],file)).replace('\\','/'),os.path.join(remdirvar,walker[0],file).replace('\\','/'))
+
+        if plat_type == 'Linux':
+            os.system('setterm -cursor on')
+        sftpc.close()
+
+    except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.BadAuthenticationType):
+        print("""
+{}<ERROR>
+Username, password, or SSH key are incorrect, or the server is not accepting the type of authentication attempted{}.\n""".format(r_,_nc))
+        input("Press a key to continue...")
+        print(" ")
+        return
+    except (BlockingIOError, socket.timeout):
+        print("""
+{}<ERROR>
+Server is offline, unavailable, or otherwise not responding. Check the hostname or IP and try again.{}\n""".format(r_,_nc))
+        input("Press a key to continue...")
+        print(" ")
+        return
+    except scp.SCPException as e:
+        print("""
+{}<ERROR>
+The server raised an exception: {} {}\n""".format(r_,e,_nc))
+        input("Press a key to continue...")
+        print(" ")
+        return
+    except WindowsError:
+        print("""
+{}<ERROR>
+The server raised an exception.\n""")
+        input("Press a key to continue...")
+        print(" ")
+        return
+
 def mpfuSSH():
     # If serverlist file NOT supplied as CLI argument
     if len(sys.argv) == 1:
@@ -713,6 +791,11 @@ If you wish to issue commands to multiple machines, provide a serverlist when ru
 def mpfuMenu():
     # Revert back to path completer after returning to menu
     bashCompleter()
+
+    # Reset working dir to homepath
+    global homepath
+    os.chdir(homepath)
+
     print("""
             {}__  __ ___ ___ _   _
            |  \/  | _ \ __| | | |
@@ -725,16 +808,17 @@ def mpfuMenu():
 
  1) Upload local files to {}one{} destination (server, share, bucket, etc.)
  2) Upload local files to {}multiple{} destinations from manual INPUT
- 3) Upload local files to {}multiple{} destinations from a {}list{} entered at CLI (./mpfu.py <filename>)\n
+ 3) Upload local files to {}multiple{} destinations from a {}list{} entered at CLI (./mpfu.py <filename>)
+ 4) Upload a {}directory{} recursively (all subdirectories and files) to one or more destinations (SFTP only)\n
 
  {}|Control|{}
 
- S) Issue a command over SSH to one or more remote machines
+ S) Issue a {}command{} over {}SSH{} to one or more remote machines
 
 
- q) Quit\n""".format(bld_,_nc,y_,_nc,y_,_nc,y_,_nc,y_,_nc,bld_,_nc))
+ q) Quit\n""".format(bld_,_nc,y_,_nc,y_,_nc,y_,_nc,y_,_nc,y_,_nc,bld_,_nc,y_,_nc,y_,_nc))
 
-    choicevar = input("Select an option [1-3, S, or (q)uit]: ")
+    choicevar = input("Select an option [1-4, S, or (q)uit]: ")
 
     if choicevar == "1":
         mpfuUpload()
@@ -742,6 +826,8 @@ def mpfuMenu():
         mpfuMultiUpload()
     elif choicevar == "3":
         mpfuMultiUploadFile()
+    elif choicevar == "4":
+        mpfuDirUpload()
     elif choicevar == "s" or choicevar == "S":
         mpfuSSH()
     elif choicevar == "q" or choicevar == "Q":
