@@ -428,10 +428,10 @@ The server raised an exception: {} {}\n""".format(r_, e, _nc))
             netbios_n = netbios_n[0].upper()
 
             # Extract service name from input
-            share_n = remdirvar.split('/')[1].replace('/', '')
+            share_n = remdirvar.replace('\\\\', '/').replace('\\', '/').split('/')[1].replace('/', '')
 
             # Extract path from input
-            path_n = remdirvar.split('/')[2:]
+            path_n = remdirvar.replace('\\\\', '/').replace('\\', '/').split('/')[2:]
             path_n = '/' + '/'.join(path_n)
 
             # Establish actual SMB connection
@@ -451,7 +451,6 @@ The server raised an exception: {} {}\n""".format(r_, e, _nc))
                 spinner = Halo(text=sizedisplay, placement='right',
                                color='yellow', spinner='dots')
                 spinner.start()
-
                 with open(g, 'rb') as file:
                     smbc.storeFile(share_n, path_n + gfile, file, timeout=15)
 
@@ -465,7 +464,6 @@ The server raised an exception: {} {}\n""".format(r_, e, _nc))
                 os.system('setterm -cursor on')
             print("\n")
         except (socket.gaierror, socket.timeout):
-            spinner.stop()
             print("""
     {}<ERROR>
     Server is offline, unavailable, or otherwise not responding. Check the hostname or IP and try again.{}\n""".format(r_, _nc))
@@ -474,10 +472,10 @@ The server raised an exception: {} {}\n""".format(r_, e, _nc))
             return
 
         except OperationFailure:
-            spinner.stop()
             print("""
     {}<ERROR>
-    Unable to connect to share. Permissions may be invalid.{}\n""".format(r_, _nc))
+    Unable to connect to share. Permissions may be invalid or share name may be wrong.
+    Please use the following format (do NOT include server name): {}/share/path/to/target/ {}\n""".format(r_,p_,_nc))
             input("Press a key to continue...")
             print(" ")
             return
@@ -569,6 +567,7 @@ def mpfuUpload():
 
 
 def s3Upload():
+    protvar = "s3"
     remdirvar = input(
         "\nBucket name (without formatting, i.e. s3bucketname): ")
     servvar = "s3://"
@@ -718,7 +717,7 @@ def mpfuDirUpload():
     servvar = servPrompt(lastserv)
     uservar, passvar = credPrompt()
     remdirvar = input(
-        "\nRemote directory on server to upload local directory (if nonexistant, it will be created): ")
+        "\nRemote directory on server to upload local directory (if nonexistent, it will be created): ")
     readline.set_completer(t.pathCompleter)
     dirvar = input("\nLocal directory to upload (include leading slash): ")
     print(" ")
