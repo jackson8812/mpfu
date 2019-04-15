@@ -23,7 +23,8 @@ from halo import Halo
 plat_type = platform.system()
 
 # Homepath of script
-homepath = os.path.abspath(os.path.dirname(sys.argv[0]))
+# homepath = os.path.abspath(os.path.dirname(sys.argv[0]))
+homepath = os.path.abspath(os.path.dirname(__file__))
 
 # Platform specific imports
 if plat_type == 'Linux':
@@ -172,11 +173,11 @@ def s3bar(t_bytes):
 
 # Try load in last server connection from sav.mpfu, if doesn't exist create it
 try:
-    with open('sav.mpfu') as f:
+    with open(os.path.join(homepath, 'sav.mpfu')) as f:
         lastserv_f = f.readlines()
         lastserv = lastserv_f[-1].strip()
 except IOError:
-    with open('sav.mpfu', 'w') as lastserv_f:
+    with open(os.path.join(homepath, 'sav.mpfu'), 'w') as lastserv_f:
         lastserv = ""
 except IndexError:
     lastserv = ""
@@ -184,11 +185,11 @@ except IndexError:
 # Prompt for server to connect to
 def servPrompt(lastserv):
     # Deduplicate previous connection list and prepare for tab completion
-    with open('sav.mpfu') as sav:
+    with open(os.path.join(homepath, 'sav.mpfu')) as sav:
         sav_f = sav.readlines()
     dedupe_f = [f.strip() for f in sav_f]
     tabsrvlist = set(dedupe_f)
-    with open('sav.mpfu', 'w') as sav_again:
+    with open(os.path.join(homepath, 'sav.mpfu'), 'w') as sav_again:
         for line in tabsrvlist:
             sav_again.write(line.strip() + "\n")
 
@@ -200,7 +201,7 @@ def servPrompt(lastserv):
     servvar = input(servprompt).strip()
     if servvar == "":
         servvar = lastserv
-    with open('sav.mpfu', 'a') as lastserv_u:
+    with open(os.path.join(homepath, 'sav.mpfu'), 'a') as lastserv_u:
         lastserv_u.write(servvar)
     lastserv = servvar
     return servvar
@@ -399,6 +400,13 @@ Server is offline, unavailable, or otherwise not responding. Check the hostname 
             print(" ")
             return
         except scp.SCPException as e:
+            print(f"""
+{r_}<ERROR>
+The server raised an exception: {e} {_nc}\n""")
+            input("Press a key to continue...")
+            print(" ")
+            return
+        except socket.gaierror as e:
             print(f"""
 {r_}<ERROR>
 The server raised an exception: {e} {_nc}\n""")
@@ -845,7 +853,6 @@ def mpfuMenu():
 
     # Reset working dir to homepath
     os.chdir(homepath)
-
     print(f"""
             {bld_}__  __ ___ ___ _   _
            |  \/  | _ \ __| | | |
