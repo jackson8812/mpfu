@@ -13,6 +13,6 @@ MPFU is a cross-platform (Windows and Linux currently, macOS in the future?) fil
 - **Tab completion for filesystem paths and filenames on all platforms**
 - **Pretty(?) colors**
 
-Python 3 is required for the script version.
+Python 3.6+ is required for the script version.
 
 In the /exe/ folder are a Windows EXE version, and a Linux ELF version. They are both standalone and do not require Python or anything else to be installed.
