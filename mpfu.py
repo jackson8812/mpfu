@@ -61,8 +61,11 @@ class tabCompleter(object):
             text = os.path.expanduser('~')
 
         # autocomplete directories with having a trailing slash
-        if os.path.isdir(text):
-            text += '/'
+        if os.path.isdir(text) and text[-1] != "\\" and text[-1] != "/":
+            if plat_type == 'Linux':
+                text += '/'
+            elif plat_type == 'Windows':
+                text += '\\'
 
         return [x for x in glob.glob(text + '*')][state]
 
@@ -84,7 +87,7 @@ class tabCompleter(object):
                 return [scrubline[0].strip() + '@' + c.strip() for c in ll if c.startswith(scrubline[1])][state]
 
             elif " " in line:
-                return ["".join(lb[:-1]) + c.strip() for c in ll if c.startswith(lb[-1])][state]
+                return [" ".join(lc[:-1]) + " "  + c.strip() for c in ll if c.startswith(lc[-1])][state]
 
             else:
                 return [c + " " for c in ll if c.startswith(line)][state]
@@ -727,79 +730,178 @@ AWS S3:
 
 
 def mpfuDirUpload():
-
-    print(f"\n\nCurrently only {y_}SFTP{_nc} (and therefore Linux systems) are supported for this function.\n")
-    servvar = servPrompt()
-    uservar, passvar = credPrompt()
-    remdirvar = input(
-        "\nRemote directory on server to upload local directory (if nonexistent, it will be created): ")
-    readline.set_completer(t.pathCompleter)
-    dirvar = input("\nLocal directory to upload (include leading slash): ")
-    print(" ")
-    protvar = "SFTP"
-    term_width, term_height = os.get_terminal_size()
-    try:
-        pssh = paramiko.SSHClient()
-        pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        pssh.connect(hostname=servvar, username=uservar,
-                     password=passvar, timeout=8)
-        sftpc = pssh.open_sftp()
-
-        dirvar = dirvar.replace('\\', '/').rstrip("/")
-        os.chdir(os.path.split(dirvar)[0])
-        parent = os.path.split(dirvar)[1]
-
-        if plat_type == 'Linux':
-            os.system('setterm -cursor off')
-        for walker in os.walk(parent):
-            try:
-                remdir_create = os.path.normpath(os.path.join(
-                    remdirvar, walker[0])).replace('\\', '/')
-                pretty_remdir = (
-                    remdir_create[:20] + "..." + remdir_create[-35:]) if len(remdir_create) > term_width - 15 else remdir_create
-                remdir_creation = f"Creating {p_}{pretty_remdir}{_nc}=>"
-                print(remdir_creation + " "
-                      * (term_width - len(remdir_creation) - 1))
-                sftpc.mkdir(os.path.normpath(os.path.join(
-                    remdirvar, walker[0])).replace('\\', '/'))
-            except Exception as e:
-                print(f"{r_}Can't create dir{_nc} {p_}{pretty_remdir}{_nc}{r_}; already exists or bad permissions{_nc}")
-                print("")
-
-            for file in walker[2]:
-                print(f"Transferring: {g_}{file}{_nc}", end="\r")
-                transferprog = f"Transferring: {g_}{file}{_nc}"
-                print(transferprog + " " * (term_width
-                                            - len(transferprog) - 1), end="\r")
-                sftpc.put(os.path.normpath(os.path.join(walker[0], file)).replace(
-                    '\\', '/'), os.path.join(remdirvar, walker[0], file).replace('\\', '/'))
-
-        if plat_type == 'Linux':
-            os.system('setterm -cursor on')
-        sftpc.close()
-
-    except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.BadAuthenticationType):
+    # If serverlist file NOT supplied as CLI argument
+    if len(sys.argv) == 1:
         print(f"""
+
+Serverlist not provided at CLI. Defaulting to {y_}single machine{_nc} directory upload mode.
+If you wish to upload to multiple machines, provide a serverlist when running {bld_}MPFU{_nc}.
+        """)
+        print(f"\nCurrently only {y_}SFTP{_nc} (and therefore Linux systems) are supported for this function.\n")
+        servvar = servPrompt()
+        uservar, passvar = credPrompt()
+        remdirvar = input(
+            "\nRemote directory on server to upload local directory (if nonexistent, it will be created): ")
+        readline.set_completer(t.pathCompleter)
+        dirvar = input("\nLocal directory to upload (include leading slash): ")
+        print(" ")
+        protvar = "SFTP"
+        term_width, term_height = os.get_terminal_size()
+        try:
+            pssh = paramiko.SSHClient()
+            pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            pssh.connect(hostname=servvar, username=uservar,
+                         password=passvar, timeout=8)
+            sftpc = pssh.open_sftp()
+
+            dirvar = dirvar.replace('\\', '/').rstrip("/")
+            os.chdir(os.path.split(dirvar)[0])
+            parent = os.path.split(dirvar)[1]
+            dirnum = 0
+            filenum = 0
+
+            if plat_type == 'Linux':
+                os.system('setterm -cursor off')
+            for walker in os.walk(parent):
+                try:
+                    remdir_create = os.path.normpath(os.path.join(
+                        remdirvar, walker[0])).replace('\\', '/')
+                    pretty_remdir = (
+                        remdir_create[:20] + "..." + remdir_create[-35:]) if len(remdir_create) > term_width - 15 else remdir_create
+                    remdir_creation = f"Creating {p_}{pretty_remdir}{_nc}=>"
+                    print(remdir_creation + " "
+                          * (term_width - len(remdir_creation) - 1))
+                    sftpc.mkdir(os.path.normpath(os.path.join(
+                        remdirvar, walker[0])).replace('\\', '/'))
+                except Exception as e:
+                    print(f"{r_}Can't create dir{_nc} {p_}{pretty_remdir}{_nc}{r_}; already exists or bad permissions{_nc}")
+                    print("")
+
+                for file in walker[2]:
+                    print(f"Transferring: {g_}{file}{_nc}", end="\r")
+                    transferprog = f"Transferring: {g_}{file}{_nc}"
+                    print(transferprog + " " * (term_width
+                                                - len(transferprog) - 1), end="\r")
+                    sftpc.put(os.path.normpath(os.path.join(walker[0], file)).replace(
+                        '\\', '/'), os.path.join(remdirvar, walker[0], file).replace('\\', '/'))
+
+            if plat_type == 'Linux':
+                os.system('setterm -cursor on')
+            sftpc.close()
+            print(f"Finished transferring {y_}{dirnum}{_nc} directories and {y_}{filenum}{_nc} files.")
+
+        except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.BadAuthenticationType):
+            print(f"""
+    {r_}<ERROR>
+    Username, password, or SSH key are incorrect, or the server is not accepting the type of authentication attempted{_nc}.\n""")
+            input("Press a key to continue...")
+            print(" ")
+            return
+        except (BlockingIOError, socket.timeout):
+            print(f"""
+    {r_}<ERROR>
+    Server is offline, unavailable, or otherwise not responding. Check the hostname or IP and try again.{_nc}\n""")
+            input("Press a key to continue...")
+            print(" ")
+            return
+        except scp.SCPException as e:
+            print(f"""
+    {r_}<ERROR>
+    The server raised an exception: {e} {_nc}\n""")
+            input("Press a key to continue...")
+            print(" ")
+            return
+
+    elif len(sys.argv) == 2:
+        remdirvar = input(
+            "\nRemote directory on servers to upload local directory (if nonexistent, it will be created): ")
+        readline.set_completer(t.pathCompleter)
+        dirvar = input("\nLocal directory to upload (include leading slash): ")
+        print(" ")
+        protvar = "SFTP"
+        term_width, term_height = os.get_terminal_size()
+
+        with open(sys.argv[1], 'r') as serv_file:
+            ufile_input = serv_file.read()
+            sfile_input = ufile_input.strip()
+
+            # Loop through input list and parse into variables
+            split_input = sfile_input.split("\n")
+            for e in range(len(split_input)):
+                pop_input = split_input.pop()
+                elem = pop_input.split(":")
+                if protvar != "s3":
+                    servvar = elem[1].strip()
+                    uservar = elem[3].strip()
+                    passvar = elem[4].strip()
+                if protvar == "s3":
+                    continue
+                try:
+                    print(f"\nStarting directory transfer to {b_}{servvar}{_nc}: ")
+                    pssh = paramiko.SSHClient()
+                    pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    pssh.connect(hostname=servvar, username=uservar,
+                                 password=passvar, timeout=8)
+                    sftpc = pssh.open_sftp()
+
+                    dirvar = dirvar.replace('\\', '/').rstrip("/")
+                    os.chdir(os.path.split(dirvar)[0])
+                    parent = os.path.split(dirvar)[1]
+                    dirnum = 0
+                    filenum = 0
+
+                    if plat_type == 'Linux':
+                        os.system('setterm -cursor off')
+                    for walker in os.walk(parent):
+                        try:
+                            remdir_create = os.path.normpath(os.path.join(
+                                remdirvar, walker[0])).replace('\\', '/')
+                            pretty_remdir = (
+                                remdir_create[:20] + "..." + remdir_create[-35:]) if len(remdir_create) > term_width - 15 else remdir_create
+                            remdir_creation = f"Creating {p_}{pretty_remdir}{_nc}=>"
+                            print(remdir_creation + " "
+                                  * (term_width - len(remdir_creation) - 1))
+                            sftpc.mkdir(os.path.normpath(os.path.join(
+                                remdirvar, walker[0])).replace('\\', '/'))
+                            dirnum += 1
+                        except Exception as e:
+                            print(f"{r_}Can't create dir{_nc} {p_}{pretty_remdir}{_nc}{r_}; already exists or bad permissions{_nc}")
+                            print("")
+
+                        for file in walker[2]:
+                            print(f"Transferring: {g_}{file}{_nc}", end="\r")
+                            transferprog = f"Transferring: {g_}{file}{_nc}"
+                            print(transferprog + " " * (term_width
+                                                        - len(transferprog) - 1), end="\r")
+                            sftpc.put(os.path.normpath(os.path.join(walker[0], file)).replace(
+                                '\\', '/'), os.path.join(remdirvar, walker[0], file).replace('\\', '/'))
+                            filenum += 1
+                    if plat_type == 'Linux':
+                        os.system('setterm -cursor on')
+                    sftpc.close()
+                    print(f"Finished transferring {y_}{dirnum}{_nc} directories and {y_}{filenum}{_nc} files.")
+
+                except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.BadAuthenticationType):
+                    print(f"""
 {r_}<ERROR>
 Username, password, or SSH key are incorrect, or the server is not accepting the type of authentication attempted{_nc}.\n""")
-        input("Press a key to continue...")
-        print(" ")
-        return
-    except (BlockingIOError, socket.timeout):
-        print(f"""
+                    input("Press a key to continue...")
+                    print(" ")
+                    return
+                except (BlockingIOError, socket.timeout):
+                    print(f"""
 {r_}<ERROR>
 Server is offline, unavailable, or otherwise not responding. Check the hostname or IP and try again.{_nc}\n""")
-        input("Press a key to continue...")
-        print(" ")
-        return
-    except scp.SCPException as e:
-        print(f"""
+                    input("Press a key to continue...")
+                    print(" ")
+                    return
+                except (Exception, IOError) as e:
+                    print(f"""
 {r_}<ERROR>
 The server raised an exception: {e} {_nc}\n""")
-        input("Press a key to continue...")
-        print(" ")
-        return
-
+                    input("Press a key to continue...")
+                    print(" ")
+                    return
 
 def mpfuSSH():
     # Load in previous connections for tab completion
@@ -831,7 +933,7 @@ If you wish to issue commands to multiple machines, provide a serverlist when ru
                 try:
                     conn.open()
                 except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.SSHException):
-                    print(f"\n{r_}SSH key authentication failed{_nc}, likely because one isn't available for this connection.\n")
+                    print(f"\n{r_}No SSH key matching this host to authenticate with.{_nc}\n")
                     print(f"Enter password for {y_}{uservar}{_nc}: ", end="")
                     passvar = getpass.getpass('')
 
@@ -968,11 +1070,14 @@ def mpfuMenu():
         sys.exit()
     else:
         print(f"\n{r_}Not an option!{_nc}")
-
-
-menuloop = 1
-while menuloop == 1:
+metaloop = 1
+while metaloop == 1:
     try:
-        mpfuMenu()
-    except EOFError:
-        pass
+        menuloop = 1
+        while menuloop == 1:
+            try:
+                mpfuMenu()
+            except EOFError:
+                pass
+    except Exception as e:
+        print(f"{r_}An exception occurred: {e}{_nc}")
