@@ -69,9 +69,22 @@ class tabCompleter(object):
     def createListCompleter(self, ll):
         def listCompleter(text, state):
             line = readline.get_line_buffer()
+            lb = line.partition(" ")
+            lc = line.split()
 
             if not line:
                 return [c + " " for c in ll][state]
+
+            elif line.startswith('./'):
+                scrubline = line.replace('./', '')
+                return ['./' + c for c in ll if c.startswith(scrubline)][state]
+
+            elif '@' in line:
+                scrubline = line.split('@')
+                return [scrubline[0].strip() + '@' + c.strip() for c in ll if c.startswith(scrubline[1])][state]
+
+            elif " " in line:
+                return ["".join(lb[:-1]) + c.strip() for c in ll if c.startswith(lb[-1])][state]
 
             else:
                 return [c + " " for c in ll if c.startswith(line)][state]
@@ -171,19 +184,23 @@ def s3bar(t_bytes):
     sys.stdout.write(message)
     sys.stdout.flush()
 
-# Try load in last server connection from sav.mpfu, if doesn't exist create it
-try:
-    with open(os.path.join(homepath, 'sav.mpfu')) as f:
-        lastserv_f = f.readlines()
-        lastserv = lastserv_f[-1].strip()
-except IOError:
-    with open(os.path.join(homepath, 'sav.mpfu'), 'w') as lastserv_f:
+def lastServ():
+    # Try load in last server connection from sav.mpfu, if doesn't exist create it
+    try:
+        with open(os.path.join(homepath, 'sav.mpfu')) as f:
+            lastserv_f = f.readlines()
+            lastserv = lastserv_f[-1].strip()
+    except IOError:
+        with open(os.path.join(homepath, 'sav.mpfu'), 'w') as lastserv_f:
+            lastserv = ""
+    except IndexError:
         lastserv = ""
-except IndexError:
-    lastserv = ""
+    return lastserv, lastserv_f
 
 # Prompt for server to connect to
-def servPrompt(lastserv):
+def servPrompt():
+    lastserv, lastserv_f = lastServ()
+
     # Deduplicate previous connection list and prepare for tab completion
     with open(os.path.join(homepath, 'sav.mpfu')) as sav:
         sav_f = sav.readlines()
@@ -327,7 +344,8 @@ The server raised an exception: {e} {_nc}\n""")
     if protvar == "sftp":
         try:
             pssh = paramiko.SSHClient()
-            pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            pssh.load_system_host_keys()
+            pssh.set_missing_host_key_policy(paramiko.WarningPolicy())
             pssh.connect(hostname=servvar, username=uservar,
                          password=passvar, timeout=8)
             sftpc = pssh.open_sftp()
@@ -369,7 +387,7 @@ The server raised an exception: {e} {_nc}\n""")
         try:
             pssh = paramiko.SSHClient()
             pssh.load_system_host_keys()
-            pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            pssh.set_missing_host_key_policy(paramiko.WarningPolicy())
             pssh.connect(hostname=servvar, username=uservar,
                          password=passvar, timeout=8)
             pscp = scp.SCPClient(pssh.get_transport(), progress=sbar)
@@ -544,7 +562,7 @@ def mpfuUpload():
     if protvar == "s3":
         return s3Upload()
     else:
-        servvar = servPrompt(lastserv)
+        servvar = servPrompt()
 
     if protvar != "s3":
 
@@ -711,7 +729,7 @@ AWS S3:
 def mpfuDirUpload():
 
     print(f"\n\nCurrently only {y_}SFTP{_nc} (and therefore Linux systems) are supported for this function.\n")
-    servvar = servPrompt(lastserv)
+    servvar = servPrompt()
     uservar, passvar = credPrompt()
     remdirvar = input(
         "\nRemote directory on server to upload local directory (if nonexistent, it will be created): ")
@@ -738,7 +756,7 @@ def mpfuDirUpload():
                 remdir_create = os.path.normpath(os.path.join(
                     remdirvar, walker[0])).replace('\\', '/')
                 pretty_remdir = (
-                    "..." + remdir_create[50:]) if len(remdir_create) > 52 else remdir_create
+                    remdir_create[:20] + "..." + remdir_create[-35:]) if len(remdir_create) > term_width - 15 else remdir_create
                 remdir_creation = f"Creating {p_}{pretty_remdir}{_nc}=>"
                 print(remdir_creation + " "
                       * (term_width - len(remdir_creation) - 1))
@@ -784,33 +802,90 @@ The server raised an exception: {e} {_nc}\n""")
 
 
 def mpfuSSH():
+    # Load in previous connections for tab completion
+    _, lastserv_f = lastServ()
+    t.createListCompleter(lastserv_f)
+    readline.set_completer(t.listCompleter)
+
+    # Initialize list to buffer multiple cmd output for tab completion
+    bufferlist = []
+
     # If serverlist file NOT supplied as CLI argument
     if len(sys.argv) == 1:
         print(f"""
 Serverlist not provided at CLI. Defaulting to {y_}single machine{_nc} control mode.
 If you wish to issue commands to multiple machines, provide a serverlist when running {bld_}MPFU{_nc}.
         """)
+        try:
+            connectloop = 1
+            while connectloop == 1:
 
-        servvar = servPrompt(lastserv)
+                login_prompt = f"\nEnter user and server for command ({y_}username@server.address.net{_nc}): "
+                ssh_prompt = input(login_prompt).strip()
+                uservar, servvar = ssh_prompt.split('@')[0], ssh_prompt.split('@')[1]
+                conn = fabric.Connection(servvar, user=uservar)
 
-        uservar, passvar = credPrompt()
+                with open(os.path.join(homepath, 'sav.mpfu'), 'a') as lastserv_u:
+                    lastserv_u.write('\n' + servvar)
 
-        cmdloop = 1
-        while cmdloop == 1:
-            try:
-                print(f"\nConnecting to {b_}{servvar}{_nc} =>", end="")
-                cmdvar = input(
-                    "\nEnter command to run on server (Ctrl-D to return to menu): ")
-                print(" ")
-                cmdresult = fabric.Connection(servvar, user=uservar, connect_kwargs={
-                                              "password": passvar}).run(cmdvar)
-                print(" ")
-            except EOFError:
-                break
-            except Exception as e:
-                print(f"{r_}The command returned an error{_nc}: {e}")
-                pass
+                try:
+                    conn.open()
+                except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.SSHException):
+                    print(f"\n{r_}SSH key authentication failed{_nc}, likely because one isn't available for this connection.\n")
+                    print(f"Enter password for {y_}{uservar}{_nc}: ", end="")
+                    passvar = getpass.getpass('')
 
+                    passauth_conn = fabric.Connection(servvar, user=uservar, connect_kwargs={
+                                                  "password": passvar})
+
+                    passauth_conn.open()
+
+                    passauthloop = 1
+                    while passauthloop == 1:
+                        print(f"\nConnecting to {b_}{servvar}{_nc} =>", end="")
+                        cmdvar = input(
+                            "\nEnter command to run on server (Ctrl-D to return to menu): ")
+                        print(" ")
+                        cmdresult = passauth_conn.run(cmdvar)
+
+                        # Create list of cmd output lines, append them to buffer each cmd, and deduplicate
+                        outputlist = [c for c in cmdresult.stdout.split("\n")]
+                        bufferlist.extend(outputlist)
+                        bufferset = set(bufferlist)
+
+                        t.createListCompleter(bufferset)
+                        readline.set_completer(t.listCompleter)
+
+                        print(" ")
+                except socket.gaierror as e:
+                    print(f"{r_}The command returned an error{_nc}: {e}")
+                    continue
+
+
+                cmdloop = 1
+                while cmdloop == 1:
+                    try:
+                        print(f"\nConnecting to {b_}{servvar}{_nc} =>", end="")
+                        cmdvar = input(
+                            "\nEnter command to run on server (Ctrl-D to return to menu): ")
+                        print(" ")
+                        cmdresult = conn.run(cmdvar)
+
+                        # Create list of cmd output lines, append them to buffer each cmd, and deduplicate
+                        outputlist = [c for c in cmdresult.stdout.split("\n")]
+                        bufferlist.extend(outputlist)
+                        bufferset = set(bufferlist)
+
+                        t.createListCompleter(bufferset)
+                        readline.set_completer(t.listCompleter)
+                        print(" ")
+                    except EOFError:
+                        connectloop = 0
+                        break
+                    except Exception as e:
+                        print(f"{r_}The command returned an error{_nc}: {e}\n")
+        except EOFError:
+            pass
     elif len(sys.argv) == 2:
         cmdvar = input(
             "\nEnter command to run on servers in list (Ctrl-D to return to menu): ")
