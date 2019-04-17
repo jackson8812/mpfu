@@ -773,6 +773,7 @@ If you wish to upload to multiple machines, provide a serverlist when running {b
                           * (term_width - len(remdir_creation) - 1))
                     sftpc.mkdir(os.path.normpath(os.path.join(
                         remdirvar, walker[0])).replace('\\', '/'))
+                    dirnum += 1
                 except Exception as e:
                     print(f"{r_}Can't create dir{_nc} {p_}{pretty_remdir}{_nc}{r_}; already exists or bad permissions{_nc}")
                     print("")
@@ -784,7 +785,7 @@ If you wish to upload to multiple machines, provide a serverlist when running {b
                                                 - len(transferprog) - 1), end="\r")
                     sftpc.put(os.path.normpath(os.path.join(walker[0], file)).replace(
                         '\\', '/'), os.path.join(remdirvar, walker[0], file).replace('\\', '/'))
-
+                    filenum += 1
             if plat_type == 'Linux':
                 os.system('setterm -cursor on')
             sftpc.close()
