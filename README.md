@@ -1,7 +1,7 @@
 # MPFU :file_folder::rocket::cloud:
 Multi-Protocol File Uploader
 
-MPFU is a cross-platform (Windows and Linux currently, macOS in the future?) file upload utility and is capable of sending one or more files to multiple destination servers (from a text file or input manually) using different protocols for each connection, if desired. 
+MPFU is a cross-platform (Windows and Linux currently, macOS in the future?) system administration utility and is capable of sending one or more files to multiple destination servers (from a text file or input manually) using different protocols for each connection, if desired. 
 
 #### Features:
 - **FTP, SFTP, SCP, SMB/CIFS, AWS S3 upload**
