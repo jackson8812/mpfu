@@ -23,7 +23,6 @@ from halo import Halo
 plat_type = platform.system()
 
 # Homepath of script
-# homepath = os.path.abspath(os.path.dirname(sys.argv[0]))
 homepath = os.path.abspath(os.path.dirname(__file__))
 
 # Platform specific imports
@@ -271,15 +270,28 @@ def credPrompt():
 # Prompt for local dir and file(s) function
 def localfsPrompt():
     readline.set_completer(t.pathCompleter)
-    dirvar = input(
-        "\nLocal directory containing files to upload (include leading slash): ")
-    print("\nContents of directory: \n")
+    if plat_type == 'Linux':
+        dirinput = "\nLocal directory containing files to upload (include leading slash): "
+    elif plat_type == 'Windows':
+        dirinput = "\nLocal directory containing files to upload (include drive, i.e. C:\\upload\\directory\\): "
+    dirvar = input(dirinput)
 
-    # On Windows, tab completer allows path all the way to filename. This block handles that case.
+    # If full path is entered (with * for file), this block handles that case.
+    if dirvar.endswith('*'):
+        filevar = '*'
+        dirvar = os.path.dirname(dirvar.replace('*',''))
+        fs = dirvar, filevar
+        print(" ")
+        return fs
+    # If full path (including file) is entered, this block handles that case.
     if os.path.isfile(dirvar):
         filevar = os.path.basename(dirvar)
         dirvar = os.path.dirname(dirvar)
-        return
+        fs = dirvar, filevar
+        print(" ")
+        return fs
+
+    print("\nContents of directory: \n")
 
     # Filter subdirectories out of directory contents
     dirvarlist = os.listdir(dirvar)
@@ -350,8 +362,21 @@ The server raised an exception: {e} {_nc}\n""")
             pssh.load_system_host_keys()
             pssh.set_missing_host_key_policy(paramiko.WarningPolicy())
             pssh.connect(hostname=servvar, username=uservar,
-                         password=passvar, timeout=8)
+                         timeout=8)
             sftpc = pssh.open_sftp()
+        except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.SSHException):
+            print(f"\n{r_}No SSH key matching this host to authenticate with.{_nc}\n")
+            print(f"Enter password for {y_}{uservar}{_nc}: ", end="")
+            passvar = getpass.getpass('')
+
+            pssh = paramiko.SSHClient()
+            pssh.load_system_host_keys()
+            pssh.set_missing_host_key_policy(paramiko.WarningPolicy())
+            pssh.connect(hostname=servvar, username=uservar, password=passvar,
+                         timeout=8)
+            sftpc = pssh.open_sftp()
+
+        try:
             if plat_type == 'Linux':
                 os.system('setterm -cursor off')
             for g in fileglob:
@@ -392,8 +417,21 @@ The server raised an exception: {e} {_nc}\n""")
             pssh.load_system_host_keys()
             pssh.set_missing_host_key_policy(paramiko.WarningPolicy())
             pssh.connect(hostname=servvar, username=uservar,
-                         password=passvar, timeout=8)
+                         timeout=8)
             pscp = scp.SCPClient(pssh.get_transport(), progress=sbar)
+        except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.SSHException):
+            print(f"\n{r_}No SSH key matching this host to authenticate with.{_nc}\n")
+            print(f"Enter password for {y_}{uservar}{_nc}: ", end="")
+            passvar = getpass.getpass('')
+
+            pssh = paramiko.SSHClient()
+            pssh.load_system_host_keys()
+            pssh.set_missing_host_key_policy(paramiko.WarningPolicy())
+            pssh.connect(hostname=servvar, username=uservar, password=passvar,
+                         timeout=8)
+            pscp = scp.SCPClient(pssh.get_transport(), progress=sbar)
+
+        try:
             if plat_type == 'Linux':
                 os.system('setterm -cursor off')
             for g in fileglob:
@@ -561,33 +599,51 @@ def mpfuUpload():
 
     protvar = protPrompt()
 
-    # Pull in last connected server variable, prompt for current server, update sav.mpfu with current server
     if protvar == "s3":
         return s3Upload()
-    else:
+    elif protvar != "smb":
         servvar = servPrompt()
 
-    if protvar != "s3":
+    if protvar == "sftp" or protvar == "scp":
+        return sshUpload(protvar,servvar)
 
-        uservar, passvar = credPrompt()
+    uservar, passvar = credPrompt()
 
-        if protvar == "sftp":
-            remdirvar = input(
-                "\nRemote upload directory (remote dir MUST be specified AND include leading and trailing slash): ")
-        elif protvar == "smb":
-            smbprompt = f"\nRemote upload share (input name of share with forward slashes, i.e. {p_}/network/share/{_nc}): "
-            remdirvar = input(smbprompt)
-        else:
-            remdirvar = input(
-                "\nRemote upload directory (include leading and trailing slash, or leave blank for default): ")
+    if protvar == "smb":
+        smbprompt = f"\nEnter server and share for upload (e.g. {p_}\\\\fileserver.name.net\\network\\share\\{_nc}): "
+
+        smb_info = input(smbprompt).replace('\\\\', '/').replace('\\', '/').split('/')
+
+        servvar = smb_info[1]
+        remdirvar = '/' + '/'.join(smb_info[2:])
+
+    else:
+        remdirvar = input(
+            "\nRemote upload directory (include leading and trailing slash, or leave blank for default): ")
 
     dirvar, filevar = localfsPrompt()
 
 
     finalUpload(protvar, servvar, uservar, passvar, dirvar, filevar, remdirvar)
 
+def sshUpload(prot,serv):
+    servvar = serv
+    protvar = prot
+
+    uservar = input("\nUsername: ")
+    passvar = ""
+
+    remdirvar = input(
+        "\nRemote upload directory (remote dir must be specified with leading and trailing slash): ")
+
+
+
+    dirvar, filevar = localfsPrompt()
+
+    finalUpload(protvar, servvar, uservar, passvar, dirvar, filevar, remdirvar)
 
 def s3Upload():
+
     protvar = "s3"
     remdirvar = input(
         "\nBucket name (without formatting, i.e. s3bucketname): ")
@@ -739,7 +795,8 @@ If you wish to upload to multiple machines, provide a serverlist when running {b
         """)
         print(f"\nCurrently only {y_}SFTP{_nc} (and therefore Linux systems) are supported for this function.\n")
         servvar = servPrompt()
-        uservar, passvar = credPrompt()
+        uservar = input("\nUsername: ")
+        passvar = ""
         remdirvar = input(
             "\nRemote directory on server to upload local directory (if nonexistent, it will be created): ")
         readline.set_completer(t.pathCompleter)
@@ -751,9 +808,22 @@ If you wish to upload to multiple machines, provide a serverlist when running {b
             pssh = paramiko.SSHClient()
             pssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             pssh.connect(hostname=servvar, username=uservar,
-                         password=passvar, timeout=8)
+                         timeout=8)
             sftpc = pssh.open_sftp()
 
+        except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.SSHException):
+            print(f"\n{r_}No SSH key matching this host to authenticate with.{_nc}\n")
+            print(f"Enter password for {y_}{uservar}{_nc}: ", end="")
+            passvar = getpass.getpass('')
+
+            pssh = paramiko.SSHClient()
+            pssh.load_system_host_keys()
+            pssh.set_missing_host_key_policy(paramiko.WarningPolicy())
+            pssh.connect(hostname=servvar, username=uservar, password=passvar,
+                         timeout=8)
+            sftpc = pssh.open_sftp()
+
+        try:
             dirvar = dirvar.replace('\\', '/').rstrip("/")
             os.chdir(os.path.split(dirvar)[0])
             parent = os.path.split(dirvar)[1]
@@ -786,6 +856,7 @@ If you wish to upload to multiple machines, provide a serverlist when running {b
                     sftpc.put(os.path.normpath(os.path.join(walker[0], file)).replace(
                         '\\', '/'), os.path.join(remdirvar, walker[0], file).replace('\\', '/'))
                     filenum += 1
+
             if plat_type == 'Linux':
                 os.system('setterm -cursor on')
             sftpc.close()
@@ -975,7 +1046,8 @@ If you wish to issue commands to multiple machines, provide a serverlist when ru
                         cmdresult = conn.run(cmdvar)
 
                         # Create list of cmd output lines, append them to buffer each cmd, and deduplicate
-                        outputlist = [c for c in cmdresult.stdout.split("\n")]
+                        outputlist = [c for c in cmdresult.stdout]
+                        # atomiclist = [str(c.split()) for c in outputlist]
                         bufferlist.extend(outputlist)
                         bufferset = set(bufferlist)
 
@@ -1026,6 +1098,7 @@ If you wish to issue commands to multiple machines, provide a serverlist when ru
                         break
 # MPFU menu function
 def mpfuMenu():
+
     # Revert back to path completer after returning to menu
     bashCompleter()
 
