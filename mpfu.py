@@ -807,7 +807,7 @@ def mpfuMultiUploadFile():
     # If serverlist file NOT supplied as CLI argument
     if not args.list:
         print(f"\n{r_}No server list file provided{_nc}. Please run the utility "
-        f"with the server list text file provided as an argument: {b_}mpfu{_nc} {y_}serverlist{_nc}")
+        f"with the server list text file provided as an argument: {b_}mpfu{_nc} {y_}- l serverlist.txt{_nc}")
         print(f"""
 Server list file must be text in the following format, one entry per line:
 
@@ -888,7 +888,8 @@ def mpfuDirUpload():
         print(f"""
 
 Serverlist not provided at CLI. Defaulting to {y_}single machine{_nc} directory upload mode.
-If you wish to upload to multiple machines, provide a serverlist when running {bld_}MPFU{_nc}.
+If you wish to upload to multiple machines, provide a serverlist when running {bld_}MPFU{_nc}:
+{y_}mpfu -l serverlist.txt{_nc}
         """)
         print(f"\nCurrently only {y_}SFTP{_nc} (and therefore Linux systems) are supported for this function.\n")
         servvar = servPrompt()
@@ -1108,7 +1109,8 @@ def mpfuSSH():
     if not args.list:
         print(f"""
 Serverlist not provided at CLI. Defaulting to {y_}single machine{_nc} control mode.
-If you wish to issue commands to multiple machines, provide a serverlist when running {bld_}MPFU{_nc}.
+If you wish to issue commands to multiple machines, provide a serverlist when running {bld_}MPFU{_nc}:
+{y_}mpfu -l serverlist.txt{_nc}
         """)
         try:
             connectloop = 1
