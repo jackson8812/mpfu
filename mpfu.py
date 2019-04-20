@@ -352,8 +352,11 @@ def mpfuUpload():
             passvar = ""
             sftpc = pssh.open_sftp()
         except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.SSHException):
-            print(f"\n{r_}No SSH key matching this host to authenticate with.{_nc}\n")
-            print(f"Enter password for {y_}{uservar}{_nc}: ", end="")
+            print(
+                f"\n{y_}No SSH key matching this host to authenticate with.{_nc}\n\nEnter password for {y_}{uservar}{_nc}: ", end=" ")
+            
+            # print(f"Enter password for {y_}{uservar}{_nc}", end=": ")
+            
             passvar = getpass.getpass('')
 
             pssh = paramiko.SSHClient()
@@ -388,8 +391,7 @@ def mpfuUpload():
             pscp = scp.SCPClient(pssh.get_transport(), progress=sbar)
         except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.SSHException):
             print(
-                f"\n{r_}No SSH key matching this host to authenticate with.{_nc}\n")
-            print(f"Enter password for {y_}{uservar}{_nc}: ", end="")
+                f"\n{y_}No SSH key matching this host to authenticate with.{_nc}\n\nEnter password for {y_}{uservar}{_nc}: ", end=" ")
             passvar = getpass.getpass('')
 
             pssh = paramiko.SSHClient()
@@ -902,15 +904,15 @@ If you wish to upload to multiple machines, provide a serverlist when running {b
             sftpc = pssh.open_sftp()
 
         except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.SSHException):
-            print(f"\n{r_}No SSH key matching this host to authenticate with.{_nc}\n")
-            print(f"Enter password for {y_}{uservar}{_nc}: ", end="")
+            print(
+               f"\n{y_}No SSH key matching this host to authenticate with.{_nc}\n\nEnter password for {y_}{uservar}{_nc}: ", end=" ")
             passvar = getpass.getpass('')
 
             pssh = paramiko.SSHClient()
             pssh.load_system_host_keys()
             pssh.set_missing_host_key_policy(paramiko.WarningPolicy())
             pssh.connect(hostname=servvar, username=uservar, password=passvar,
-                         timeout=8)
+                        timeout=8)
             sftpc = pssh.open_sftp()
         
         remdirvar = input(
@@ -1123,8 +1125,8 @@ If you wish to issue commands to multiple machines, provide a serverlist when ru
                 try:
                     conn.open()
                 except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception.SSHException):
-                    print(f"\n{r_}No SSH key matching this host to authenticate with.{_nc}\n")
-                    print(f"Enter password for {y_}{uservar}{_nc}: ", end="")
+                    print(
+                        f"\n{y_}No SSH key matching this host to authenticate with.{_nc}\n\nEnter password for {y_}{uservar}{_nc}: ", end=" ")
                     passvar = getpass.getpass('')
 
                     passauth_conn = fabric.Connection(servvar, user=uservar, connect_kwargs={
