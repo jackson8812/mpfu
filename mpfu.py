@@ -1240,7 +1240,7 @@ def mpfuMenu():
 
  1) Upload local files to {y_}one{_nc} destination (server, share, bucket, etc.)
  2) Upload local files to {y_}multiple{_nc} destinations from manual INPUT
- 3) Upload local files to {y_}multiple{_nc} destinations from a {y_}list{_nc} entered at CLI (./mpfu.py <filename>)
+ 3) Upload local files to {y_}multiple{_nc} destinations from a {y_}list{_nc} entered at CLI (mpfu -l serverlist.txt)
  4) Upload a {y_}directory{_nc} recursively (all subdirectories and files) to one or more destinations (SFTP only)\n
 
  {bld_}|Control|{_nc}
