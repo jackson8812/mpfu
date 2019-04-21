@@ -294,8 +294,6 @@ def mpfuUpload():
             print(
                 f"\n{y_}No SSH key matching this host to authenticate with.{_nc}\n\nEnter password for {y_}{uservar}{_nc}: ", end=" ")
             
-            # print(f"Enter password for {y_}{uservar}{_nc}", end=": ")
-            
             passvar = getpass.getpass('')
 
             pssh = paramiko.SSHClient()
