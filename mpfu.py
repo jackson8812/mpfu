@@ -29,11 +29,12 @@ homepath = os.path.abspath(os.path.dirname(__file__))
 # CLI arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('-l','--list', required=False, help="""
-
 A list of servers to upload files and/or issue SSH commands to may be provided when running MPFU.
-Provide the serverlist as a .txt, with one server per line in the following format:
+Provide the serverlist as a text file, with one server per line in the following format:
 
-protocol:Destination IP or hostname:/remote/upload/path/:username:password """)
+protocol:Destination IP or hostname:/remote/upload/path/:username:password 
+
+""")
 args = parser.parse_args()
 
 # Color tags
@@ -104,88 +105,6 @@ def bashCompleter():
     readline.parse_and_bind("tab: complete")
 
     readline.set_completer(t.pathCompleter)
-
-# Transfer progress provider from https://github.com/jonDel/ssh_paramiko
-def pbar(transfered_bytes, total_bytes):
-    bar_length = 35
-    percent = float(transfered_bytes) / total_bytes
-    hashes = '#' * int(round(percent * bar_length))
-    spaces = ' ' * (bar_length - len(hashes))
-    message = "\rSize: " + str(total_bytes) + " bytes("\
-              + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
-    message += " || Amount of file transferred: [{0}] {1}%\r".format(hashes + spaces,
-                                                                     round(percent * 100, 2))
-    if transfered_bytes == total_bytes:
-        message = "\rSize: " + str(total_bytes) + " bytes("\
-                  + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
-        message += " || File transferred. [{0}] {1}%                    \r"\
-                   .format(hashes + spaces, round(percent * 100, 2))
-    sys.stdout.write(message)
-    sys.stdout.flush()
-
-
-# Modified progress provider for ftplib. fbar_bytes set to 0 initially to make func work
-fbar_bytes = 0
-
-
-def fbar(ftp_bytes):
-    global fbar_bytes
-    total_bytes = bar_f_size
-    fbar_bytes += 8192
-    bar_length = 35
-    percent = float(fbar_bytes) / total_bytes
-    hashes = '#' * int(round(percent * bar_length))
-    spaces = ' ' * (bar_length - len(hashes))
-    message = "\rSize: " + str(total_bytes) + " bytes("\
-              + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
-    message += " || Amount of file transferred: [{0}] {1}%\r".format(hashes + spaces,
-                                                                     round(percent * 100, 2))
-    if fbar_bytes >= total_bytes:
-        message = "\rSize: " + str(total_bytes) + " bytes("\
-                  + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
-        message += " || File transferred. [{0}] {1}%                    \r"\
-                   .format(hashes + spaces, round(percent * 100))
-        fbar_bytes = 0
-    sys.stdout.write(message)
-    sys.stdout.flush()
-
-# Modified progress provider for SCP. fname parameter added but left blank to align with scp module callback output
-def sbar(fname, total_bytes, transfered_bytes):
-    bar_length = 35
-    percent = float(transfered_bytes) / total_bytes
-    hashes = '#' * int(round(percent * bar_length))
-    spaces = ' ' * (bar_length - len(hashes))
-    message = "\rSize: " + str(total_bytes) + " bytes("\
-              + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
-    message += " || Amount of file transferred: [{}] {}%\r".format(hashes + spaces,
-                                                                   round(percent * 100, 2))
-    if transfered_bytes == total_bytes:
-        message = "\rSize: " + str(total_bytes) + " bytes("\
-                  + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
-        message += " || File transferred. [{}] {}%                    \r"\
-                   .format(hashes + spaces, round(percent * 100, 2))
-    sys.stdout.write(message)
-    sys.stdout.flush()
-
-# Modified progress provider for S3. boto3 only sends transferred bytes each update.
-def s3bar(t_bytes):
-    global s3_bytes
-    s3_bytes += t_bytes
-    bar_length = 35
-    percent = float(s3_bytes) / s3_f_size
-    hashes = '#' * int(round(percent * bar_length))
-    spaces = ' ' * (bar_length - len(hashes))
-    message = "\rSize: " + str(s3_f_size) + " bytes("\
-              + str(round(float(s3_f_size) / pow(2, 20), 2)) + " MB)"
-    message += " || Amount of file transferred: [{}] {}%\r".format(hashes + spaces,
-                                                                   round(percent * 100, 2))
-    if s3_bytes == s3_f_size:
-        message = "\rSize: " + str(s3_f_size) + " bytes("\
-                  + str(round(float(s3_f_size) / pow(2, 20), 2)) + " MB)"
-        message += " || File transferred. [{}] {}%                    \r"\
-                   .format(hashes + spaces, round(percent * 100, 2))
-    sys.stdout.write(message)
-    sys.stdout.flush()
 
 def lastServ():
     # Try load in last server connection from sav.mpfu, if doesn't exist create it
@@ -319,7 +238,27 @@ def localfsPrompt():
     fs = dirvar, filevar, fileglob
     return fs
 
-# Single destination upload function
+# Modified progress provider for SCP. fname parameter added but left blank to align with scp module callback output
+# Annoyingly must be in global namespace because it's called by connection, not transfer
+def sbar(fname, total_bytes, transfered_bytes):
+    bar_length = 35
+    percent = float(transfered_bytes) / total_bytes
+    hashes = '#' * int(round(percent * bar_length))
+    spaces = ' ' * (bar_length - len(hashes))
+    message = "\rSize: " + str(total_bytes) + " bytes("\
+        + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
+    message += " || Amount of file transferred: [{}] {}%\r".format(hashes + spaces,
+                                                                    round(percent * 100, 2))
+    if transfered_bytes == total_bytes:
+        message = "\rSize: " + str(total_bytes) + " bytes("\
+            + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
+        message += " || File transferred. [{}] {}%                    \r"\
+            .format(hashes + spaces, round(percent * 100, 2))
+    sys.stdout.write(message)
+    sys.stdout.flush()
+
+
+# Single destination upload function. Routes to protocol-specific upload worker functions.
 def mpfuUpload():
 
     protvar = protPrompt()
@@ -381,6 +320,7 @@ def mpfuUpload():
         uservar = input("\nUsername: ")
 
         import scp
+
         try:
             pssh = paramiko.SSHClient()
             pssh.load_system_host_keys()
@@ -475,8 +415,34 @@ def mpfuUpload():
 
         return s3Upload(dirvar, filevar, fileglob, remdirvar)
 
+
+# fbar_bytes initialized in global namespace to make fbar() work
+fbar_bytes = 0
+
 def ftpUpload(protvar, servvar, uservar, passvar, dirvar, filevar, remdirvar, fileglob):
     import ftplib
+
+    # Modified progress provider for ftplib. fbar_bytes set to 0 initially to make func work
+    def fbar(ftpbytes):
+        global fbar_bytes
+        total_bytes = bar_f_size
+        fbar_bytes += 8192
+        bar_length = 35
+        percent = float(fbar_bytes) / total_bytes
+        hashes = '#' * int(round(percent * bar_length))
+        spaces = ' ' * (bar_length - len(hashes))
+        message = "\rSize: " + str(total_bytes) + " bytes("\
+                + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
+        message += " || Amount of file transferred: [{0}] {1}%\r".format(hashes + spaces,
+                                                                        round(percent * 100, 2))
+        if fbar_bytes >= total_bytes:
+            message = "\rSize: " + str(total_bytes) + " bytes("\
+                    + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
+            message += " || File transferred. [{0}] {1}%                    \r"\
+                    .format(hashes + spaces, round(percent * 100))
+            fbar_bytes = 0
+        sys.stdout.write(message)
+        sys.stdout.flush()
     try:
         session = ftplib.FTP_TLS()
         session.connect(servvar, 21)
@@ -517,6 +483,24 @@ The server raised an exception: {e} {_nc}\n""")
 
 
 def sftpUpload(protvar, servvar, uservar, passvar, dirvar, filevar, remdirvar, fileglob, sftpc):
+
+    # Transfer progress provider from https://github.com/jonDel/ssh_paramiko
+    def pbar(transfered_bytes, total_bytes):
+        bar_length = 35
+        percent = float(transfered_bytes) / total_bytes
+        hashes = '#' * int(round(percent * bar_length))
+        spaces = ' ' * (bar_length - len(hashes))
+        message = "\rSize: " + str(total_bytes) + " bytes("\
+                + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
+        message += " || Amount of file transferred: [{0}] {1}%\r".format(hashes + spaces,
+                                                                        round(percent * 100, 2))
+        if transfered_bytes == total_bytes:
+            message = "\rSize: " + str(total_bytes) + " bytes("\
+                    + str(round(float(total_bytes) / pow(2, 20), 2)) + " MB)"
+            message += " || File transferred. [{0}] {1}%                    \r"\
+                    .format(hashes + spaces, round(percent * 100, 2))
+        sys.stdout.write(message)
+        sys.stdout.flush()
 
     try:
         if plat_type == 'Linux':
@@ -599,7 +583,6 @@ The server raised an exception: {e} {_nc}\n""")
         print(" ")
         return
 
-
 def smbUpload(protvar, servvar, uservar, passvar, dirvar, filevar, remdirvar, fileglob):
     from smb.SMBConnection import SMBConnection
     from smb.smb_structs import OperationFailure
@@ -680,6 +663,26 @@ def s3Upload(dirvar, filevar, fileglob, remdirvar):
 
     import boto3
     from botocore.exceptions import NoCredentialsError, ClientError
+
+    # Modified progress provider for S3. boto3 only sends transferred bytes each update.
+    def s3bar(t_bytes):
+        global s3_bytes
+        s3_bytes += t_bytes
+        bar_length = 35
+        percent = float(s3_bytes) / s3_f_size
+        hashes = '#' * int(round(percent * bar_length))
+        spaces = ' ' * (bar_length - len(hashes))
+        message = "\rSize: " + str(s3_f_size) + " bytes("\
+                + str(round(float(s3_f_size) / pow(2, 20), 2)) + " MB)"
+        message += " || Amount of file transferred: [{}] {}%\r".format(hashes + spaces,
+                                                                    round(percent * 100, 2))
+        if s3_bytes == s3_f_size:
+            message = "\rSize: " + str(s3_f_size) + " bytes("\
+                    + str(round(float(s3_f_size) / pow(2, 20), 2)) + " MB)"
+            message += " || File transferred. [{}] {}%                    \r"\
+                    .format(hashes + spaces, round(percent * 100, 2))
+        sys.stdout.write(message)
+        sys.stdout.flush()
 
     try:
         s3 = boto3.client('s3')
